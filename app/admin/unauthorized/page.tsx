@@ -11,7 +11,7 @@ export default function UnauthorizedPage() {
 
   const handleLogout = () => {
     logout()
-    router.push("/admin/login")
+    router.push("/login")
   }
 
   return (

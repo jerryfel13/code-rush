@@ -76,7 +76,7 @@ export function JudgeInterface() {
 
   const handleLogout = () => {
     logout()
-    router.push("/admin/login")
+    router.push("/login")
   }
 
   const handleSubmitScore = () => {

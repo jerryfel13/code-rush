@@ -14,7 +14,7 @@ export default function AdminPage() {
   useEffect(() => {
     // Redirect to login if not authenticated
     if (!isLoading && !isAuthenticated) {
-      router.push("/admin/login")
+      router.push("/login")
     }
   }, [isAuthenticated, isLoading, router])
 

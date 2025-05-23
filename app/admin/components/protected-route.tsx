@@ -18,7 +18,7 @@ export function ProtectedRoute({ children, allowedRoles = ["admin", "judge"] }: 
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      router.push("/admin/login")
+      router.push("/login")
     } else if (!isLoading && isAuthenticated && userRole && !allowedRoles.includes(userRole)) {
       // Redirect if user doesn't have the required role
       router.push("/admin/unauthorized")
