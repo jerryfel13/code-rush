@@ -1,6 +1,6 @@
 "use client"
-import { AdminDashboard, JudgeInterface } from "./components"
-import { useAuth } from "./hooks/useAuth"
+import { AdminDashboard, JudgeInterface } from "../components"
+import { useAuth } from "../context/auth-context"
 
 const Page = () => {
   const { userRole } = useAuth()
