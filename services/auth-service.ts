@@ -2,6 +2,7 @@ import { auth, db } from "@/lib/firebase"
 import { signInWithEmailAndPassword } from "firebase/auth"
 import { doc, getDoc } from "firebase/firestore"
 import { User } from "@/context/auth-context"
+import { toast } from 'react-toastify'
 
 export async function loginUser(email: string, password: string): Promise<{ user: User | null; error?: string }> {
   try {
@@ -13,6 +14,7 @@ export async function loginUser(email: string, password: string): Promise<{ user
     const userDoc = await getDoc(doc(db, "users", firebaseUser.uid))
     console.log(userDoc.data());
     if (!userDoc.exists()) {
+      toast.error("User data not found");
       return { user: null, error: "User data not found" }
     }
 
@@ -30,6 +32,7 @@ export async function loginUser(email: string, password: string): Promise<{ user
     return { user }
   } catch (error: any) {
     console.error("Login error:", error)
+    toast.error(error.message || "An error occurred during login");
     return { 
       user: null, 
       error: error.message || "An error occurred during login" 
