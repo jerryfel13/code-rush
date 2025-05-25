@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { useToast } from "@/hooks/use-toast"
 import { loginUser } from "@/services/auth-service"
 import { useAuth } from "@/context/auth-context"
+import { useParticipantAuth } from "@/app/participant/context/participant-auth-context"
 import Image from "next/image"
 
 export default function Login() {
@@ -17,6 +18,7 @@ export default function Login() {
   const router = useRouter()
   const { toast } = useToast()
   const { login } = useAuth()
+  const { login: loginParticipant } = useParticipantAuth()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -35,8 +37,19 @@ export default function Login() {
       }
 
       if (response.user) {
-        // Store user data in context
-        login(response.user)
+        // Store user data in appropriate context based on role
+        if (response.user.role === "participant") {
+          loginParticipant({
+            id: response.user.id,
+            name: response.user.name,
+            email: response.user.email,
+            teamId: response.user.id,
+            teamName: response.user.teamName,
+            role: response.user.role
+          })
+        } else {
+          login(response.user)
+        }
         
         toast({
           title: "Login Successful",

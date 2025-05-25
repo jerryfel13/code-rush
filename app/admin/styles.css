@@ -1,0 +1,63 @@
+.modal {
+  background: linear-gradient(135deg, #050d1a 80%, #0fffc1 100%);
+  border: 3px solid cyan;
+  color: rgb(103 232 249 / var(--tw-text-opacity, 1));
+  padding: 32px 24px;
+  border-radius: 18px;
+  font-family: 'Share Tech Mono', 'Courier New', monospace;
+  text-shadow: 0 0 8px #0fffc1, 0 0 2px cyan;
+  margin: 0 !important;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: stretch;
+  /* Custom scrollbar */
+  scrollbar-width: thin;
+  scrollbar-color: cyan #111;
+}
+
+.modal::-webkit-scrollbar {
+  width: 12px;
+}
+
+.modal::-webkit-scrollbar-thumb {
+  background: cyan;
+  border-radius: 6px;
+  box-shadow: 0 0 10px cyan, 0 0 20px cyan;
+}
+
+.modal::-webkit-scrollbar-track {
+  background: #111;
+  border-radius: 6px;
+}
+
+.modal-title {
+  font-size: 2em;
+  margin-bottom: 16px;
+  text-align: center;
+  color: rgb(103 232 249 / var(--tw-text-opacity, 1));
+  text-shadow: 0 0 12px #0fffc1, 0 0 4px cyan;
+  letter-spacing: 2px;
+}
+
+.modal-content {
+  margin-bottom: 20px;
+  color: rgb(103 232 249 / var(--tw-text-opacity, 1));
+  text-shadow: 0 0 8px #0fffc1;
+}
+
+.modal-button {
+  background: linear-gradient(90deg, #0fffc1 0%, #00bfff 100%);
+  border: 2px solid cyan;
+  color: #050d1a;
+  font-weight: bold;
+  padding: 12px 28px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.3s, color 0.3s, box-shadow 0.3s;
+}
+
+.modal-button:hover {
+  background: cyan;
+  color: #050d1a;
+} 

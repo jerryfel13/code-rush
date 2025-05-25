@@ -1,41 +1,28 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Clock, AlertTriangle } from "lucide-react"
 
 interface TimerProps {
-  initialTime: number // in seconds
+  time: number // in seconds, controlled by parent
   onTimeUp: () => void
+  isPaused: boolean
+  onTick?: (remaining: number) => void // Optional callback for parent to track remaining time
 }
 
-export function Timer({ initialTime, onTimeUp }: TimerProps) {
-  const [timeRemaining, setTimeRemaining] = useState(initialTime)
-  const [isWarning, setIsWarning] = useState(false)
-
+export function Timer({ time, onTimeUp, isPaused, onTick }: TimerProps) {
   useEffect(() => {
-    // Reset timer when initialTime changes
-    setTimeRemaining(initialTime)
-    setIsWarning(false)
-  }, [initialTime])
-
-  useEffect(() => {
-    if (timeRemaining <= 0) {
-      onTimeUp()
-      return
+    if (time <= 0) {
+      onTimeUp();
+      return;
     }
-
-    // Set warning when less than 5 minutes remaining
-    if (timeRemaining <= 300 && !isWarning) {
-      setIsWarning(true)
-    }
-
+    if (isPaused) return;
     const timer = setInterval(() => {
-      setTimeRemaining((prev) => prev - 1)
-    }, 1000)
-
-    return () => clearInterval(timer)
-  }, [timeRemaining, isWarning, onTimeUp])
+      if (onTick && time > 0) onTick(time - 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [time, isPaused, onTimeUp, onTick]);
 
   // Format time as MM:SS
   const formatTime = (seconds: number) => {
@@ -45,11 +32,11 @@ export function Timer({ initialTime, onTimeUp }: TimerProps) {
   }
 
   return (
-    <Card className={isWarning ? "border-red-500" : ""}>
+    <Card className={time <= 300 ? "border-red-500" : ""}>
       <CardContent className="p-3 flex items-center gap-2">
-        {isWarning ? <AlertTriangle className="h-5 w-5 text-red-500" /> : <Clock className="h-5 w-5 text-primary" />}
-        <span className={`font-mono text-lg ${isWarning ? "text-red-500 font-bold" : ""}`}>
-          {formatTime(timeRemaining)}
+        {time <= 300 ? <AlertTriangle className="h-5 w-5 text-red-500" /> : <Clock className="h-5 w-5 text-primary" />}
+        <span className={`font-mono text-lg ${time <= 300 ? "text-red-500 font-bold" : ""}`}>
+          {formatTime(time)}
         </span>
       </CardContent>
     </Card>

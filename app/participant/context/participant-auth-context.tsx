@@ -20,6 +20,8 @@ export type Participant = {
 // Define auth context type
 type ParticipantAuthContextType = {
   participant: Participant | null
+  isAuthenticated: boolean
+  isLoading: boolean
   login: (participant: Participant) => void
   logout: () => Promise<void>
 }
@@ -29,6 +31,8 @@ const ParticipantAuthContext = createContext<ParticipantAuthContextType | undefi
 
 export function ParticipantAuthProvider({ children }: { children: React.ReactNode }) {
   const [participant, setParticipant] = useState<Participant | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -37,12 +41,15 @@ export function ParticipantAuthProvider({ children }: { children: React.ReactNod
         const storedParticipant = localStorage.getItem("participant")
         if (storedParticipant) {
           setParticipant(JSON.parse(storedParticipant))
+          setIsAuthenticated(true)
         }
       } else {
         // User is signed out
         setParticipant(null)
+        setIsAuthenticated(false)
         localStorage.removeItem("participant")
       }
+      setIsLoading(false)
     })
 
     return () => unsubscribe()
@@ -50,6 +57,7 @@ export function ParticipantAuthProvider({ children }: { children: React.ReactNod
 
   const login = (participant: Participant) => {
     setParticipant(participant)
+    setIsAuthenticated(true)
     localStorage.setItem("participant", JSON.stringify(participant))
   }
 
@@ -57,6 +65,7 @@ export function ParticipantAuthProvider({ children }: { children: React.ReactNod
     try {
       await signOut(auth)
       setParticipant(null)
+      setIsAuthenticated(false)
       localStorage.removeItem("participant")
     } catch (error) {
       console.error("Error signing out:", error)
@@ -64,7 +73,7 @@ export function ParticipantAuthProvider({ children }: { children: React.ReactNod
   }
 
   return (
-    <ParticipantAuthContext.Provider value={{ participant, login, logout }}>
+    <ParticipantAuthContext.Provider value={{ participant, isAuthenticated, isLoading, login, logout }}>
       {children}
     </ParticipantAuthContext.Provider>
   )

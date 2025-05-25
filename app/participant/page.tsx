@@ -11,7 +11,7 @@ export default function ParticipantPage() {
   useEffect(() => {
     // Check if user is authenticated after the component mounts
     if (!isLoading && !isAuthenticated) {
-      router.push("/participant/login")
+      router.push("/login")
     }
   }, [isAuthenticated, isLoading, router])
 

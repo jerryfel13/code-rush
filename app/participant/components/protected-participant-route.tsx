@@ -17,7 +17,7 @@ export function ProtectedParticipantRoute({ children }: ProtectedParticipantRout
   useEffect(() => {
     // Redirect to login if not authenticated
     if (!isLoading && !isAuthenticated) {
-      router.push("/participant/login")
+      router.push(" /login")
     }
   }, [isAuthenticated, isLoading, router])
 

@@ -19,7 +19,7 @@ import { Search, Plus, Edit, Trash2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { auth, db } from "@/lib/firebase"
 import { createUserWithEmailAndPassword } from "firebase/auth"
-import { doc, setDoc, collection, getDocs, updateDoc } from "firebase/firestore"
+import { doc, setDoc, collection, getDocs, updateDoc, onSnapshot } from "firebase/firestore"
 
 export function TeamsList() {
   const { toast } = useToast()
@@ -46,9 +46,7 @@ export function TeamsList() {
 
   // Fetch teams from Firestore on mount
   useEffect(() => {
-    const fetchTeams = async () => {
-      try {
-        const querySnapshot = await getDocs(collection(db, "users"))
+    const unsubscribe = onSnapshot(collection(db, "users"), (querySnapshot) => {
         const teamsData: any[] = []
         querySnapshot.forEach((doc) => {
           const data = doc.data()
@@ -63,11 +61,8 @@ export function TeamsList() {
           }
         })
         setTeams(teamsData)
-      } catch (error) {
-        toast({ title: "Failed to fetch teams", description: (error as any).message, variant: "destructive" })
-      }
-    }
-    fetchTeams()
+    })
+    return () => unsubscribe()
   }, [])
 
   const filteredTeams = teams.filter(
@@ -266,10 +261,10 @@ export function TeamsList() {
 
       {/* Add Team Dialog */}
       <Dialog open={isAddTeamOpen} onOpenChange={setIsAddTeamOpen}>
-        <DialogContent className="max-w-2xl w-full mx-auto overflow-y-auto max-h-[90vh]">
+        <DialogContent className="modal w-[90vw] h-[90vh] max-w-none max-h-none overflow-y-auto p-8">
           <DialogHeader>
-            <DialogTitle>Add New Team</DialogTitle>
-            <DialogDescription>Register a new team in the system</DialogDescription>
+            <DialogTitle className="modal-title">Add New Team</DialogTitle>
+            <DialogDescription className="modal-content">Register a new team in the system</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
@@ -332,12 +327,13 @@ export function TeamsList() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsAddTeamOpen(false)}>
+            <Button variant="outline" onClick={() => setIsAddTeamOpen(false)} className="modal-button">
               Cancel
             </Button>
             <Button
               onClick={handleRegisterTeam}
               disabled={isRegistering}
+              className="modal-button"
             >
               {isRegistering ? "Registering..." : "Register Team"}
             </Button>
@@ -347,7 +343,7 @@ export function TeamsList() {
 
       {/* Edit Team Dialog */}
       <Dialog open={isEditTeamOpen} onOpenChange={setIsEditTeamOpen}>
-        <DialogContent>
+        <DialogContent className="modal w-[90vw] h-[90vh] max-w-none max-h-none overflow-y-auto p-8">
           <DialogHeader>
             <DialogTitle>Edit Team</DialogTitle>
             <DialogDescription>Update the team details</DialogDescription>
@@ -441,7 +437,7 @@ export function TeamsList() {
 
       {/* Delete Team Dialog */}
       <Dialog open={isDeleteTeamOpen} onOpenChange={setIsDeleteTeamOpen}>
-        <DialogContent>
+        <DialogContent className="modal w-[90vw] h-[90vh] max-w-none max-h-none overflow-y-auto p-8">
           <DialogHeader>
             <DialogTitle>Delete Team</DialogTitle>
             <DialogDescription>
@@ -453,7 +449,13 @@ export function TeamsList() {
               <p>
                 Team: <span className="font-medium">{selectedTeam.name}</span>
               </p>
-              <p className="text-sm text-muted-foreground">Members: {selectedTeam.members.map((m: any) => m.name).join(", ")}</p>
+              <p className="text-sm text-muted-foreground">
+                Members: {
+                  Array.isArray(selectedTeam.members)
+                    ? selectedTeam.members.map((m: any) => m.name).join(", ")
+                    : selectedTeam.members || "N/A"
+                }
+              </p>
             </div>
           )}
           <DialogFooter>

@@ -7,6 +7,7 @@ import { ProtectedRoute } from "./components/protected-route"
 import { AdminDashboard } from "./components/admin-dashboard"
 import { JudgeInterface } from "./components/judge-interface"
 import 'react-toastify/dist/ReactToastify.css';
+import './styles.css'; // Import custom styles
 
 export default function AdminPage() {
   const { userRole, isAuthenticated, isLoading } = useAuth()
