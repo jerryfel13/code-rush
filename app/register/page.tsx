@@ -134,32 +134,46 @@ export default function Register() {
               <label htmlFor="showPassword" className="text-cyan-100 text-sm select-none">Show Password</label>
             </div>
             <div>
-              <label className="text-sm font-medium text-cyan-200">Team Members Full Name (Lastname, Firstname)</label>
+              <label className="text-sm sm:text-base font-medium text-cyan-200">Team Members Full Name (Lastname, Firstname)</label>
               {members.map((member, idx) => (
-                <div key={idx} className="flex gap-2 mb-2">
-                  <Input
-                    placeholder="Member Name"
-                    value={member.name}
-                    onChange={(e) => handleMemberChange(idx, "name", e.target.value)}
-                    required
-                    className="rounded-lg border border-cyan-700 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400 transition shadow-sm bg-[#232526]/80 text-cyan-100 placeholder-cyan-400"
-                  />
-                  <Input
-                    placeholder="Member Email"
-                    type="email"
-                    value={member.email}
-                    onChange={(e) => handleMemberChange(idx, "email", e.target.value)}
-                    required
-                    className="rounded-lg border border-cyan-700 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400 transition shadow-sm bg-[#232526]/80 text-cyan-100 placeholder-cyan-400"
-                  />
+                <div
+                  key={idx}
+                  className="flex flex-col sm:flex-row gap-2 gap-y-2 mb-2 p-2 rounded-lg bg-[#232526]/60 border border-cyan-800"
+                >
+                  <div className="flex flex-col w-full">
+                    <label className="text-xs text-cyan-200 mb-1 sm:hidden">Full Name</label>
+                    <Input
+                      placeholder="Member Name"
+                      value={member.name}
+                      onChange={(e) => handleMemberChange(idx, "name", e.target.value)}
+                      required
+                      className="rounded-lg border border-cyan-700 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400 transition shadow-sm bg-[#232526]/80 text-cyan-100 placeholder-cyan-400 text-base sm:text-lg w-full"
+                    />
+                  </div>
+                  <div className="flex flex-col w-full">
+                    <label className="text-xs text-cyan-200 mb-1 sm:hidden">Email</label>
+                    <Input
+                      placeholder="Member Email"
+                      type="email"
+                      value={member.email}
+                      onChange={(e) => handleMemberChange(idx, "email", e.target.value)}
+                      required
+                      className="rounded-lg border border-cyan-700 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400 transition shadow-sm bg-[#232526]/80 text-cyan-100 placeholder-cyan-400 text-base sm:text-lg w-full"
+                    />
+                  </div>
                   {members.length > 1 && (
-                    <Button type="button" variant="destructive" onClick={() => removeMember(idx)}>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      onClick={() => removeMember(idx)}
+                      className="w-full sm:w-auto mt-2 sm:mt-0"
+                    >
                       Remove
                     </Button>
                   )}
                 </div>
               ))}
-              <Button type="button" onClick={addMember} className="mt-2">Add Member</Button>
+              <Button type="button" onClick={addMember} className="mt-2 w-full sm:w-auto">Add Member</Button>
             </div>
             <div className="flex items-center gap-2">
               <input
