@@ -93,54 +93,56 @@ export default function Register() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-[#232526] via-[#0f2027] to-[#2c5364] px-2 sm:px-4">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-[#232526] via-[#0f2027] to-[#2c5364] px-4">
       {/* Partnership Logos */}
-      <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6 mb-4 mt-4">
-        <Image src="/cc-logo.png.jpg" alt="Coders Club Logo" width={80} height={80} className="rounded-full shadow-lg bg-[#232526] p-2 border-2 border-cyan-400 w-16 h-16 sm:w-20 sm:h-20" />
-        <span className="text-2xl font-bold text-cyan-400">x</span>
-        <Image src="/cs-logo.png.jpg" alt="Computer Society Logo" width={80} height={80} className="rounded-full shadow-lg bg-[#232526] p-2 border-2 border-purple-400 w-16 h-16 sm:w-20 sm:h-20" />
+      <div className="flex flex-col items-center mb-8">
+        <div className="flex items-center gap-6">
+          <Image src="/cc-logo.png.jpg" alt="Coders Club Logo" width={80} height={80} className="rounded-full shadow-lg bg-[#232526] p-2 border-2 border-cyan-400" />
+          <span className="text-2xl font-bold text-cyan-400">x</span>
+          <Image src="/cs-logo.png.jpg" alt="Computer Society Logo" width={80} height={80} className="rounded-full shadow-lg bg-[#232526] p-2 border-2 border-purple-400" />
+        </div>
+        <div className="mt-2 text-center text-cyan-200 text-sm drop-shadow">
+          Developed by <span className="font-semibold text-cyan-300">Coders Club</span> <br />
+          in partnership with <span className="font-semibold text-purple-300">Computer Society Organization</span>
+        </div>
       </div>
-      <div className="mt-2 text-center text-cyan-200 text-xs sm:text-sm drop-shadow mb-6">
-        Developed by <span className="font-semibold text-cyan-300">Coders Club</span> <br />
-        in partnership with <span className="font-semibold text-purple-300">Computer Society Organization</span>
-      </div>
-      <Card className="w-full max-w-[98vw] sm:max-w-lg md:max-w-xl lg:max-w-2xl bg-[#181c24]/80 backdrop-blur-md shadow-2xl border border-cyan-700/30 rounded-2xl p-2 sm:p-6 md:p-8">
+      <Card className="w-full max-w-lg bg-[#181c24]/80 backdrop-blur-md shadow-2xl border border-cyan-700/30 rounded-2xl p-8">
         <CardHeader>
-          <CardTitle className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-center text-cyan-300 drop-shadow">Register Team</CardTitle>
-          <CardDescription className="text-center text-cyan-100 text-sm sm:text-base">Sign up your team to participate in Code Rush</CardDescription>
+          <CardTitle className="text-3xl font-extrabold text-center text-cyan-300 drop-shadow">Register Team</CardTitle>
+          <CardDescription className="text-center text-cyan-100">Sign up your team to participate in Code Rush</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6 py-2 sm:py-4">
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="text-sm sm:text-base font-medium text-cyan-200">Team Name</label>
-              <Input value={teamName} onChange={(e) => setTeamName(e.target.value)} required className="rounded-lg border border-cyan-700 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400 transition shadow-sm bg-[#232526]/80 text-cyan-100 placeholder-cyan-400 text-base sm:text-lg" />
+              <label className="text-sm font-medium text-cyan-200">Team Name</label>
+              <Input value={teamName} onChange={(e) => setTeamName(e.target.value)} required className="rounded-lg border border-cyan-700 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400 transition shadow-sm bg-[#232526]/80 text-cyan-100 placeholder-cyan-400" />
             </div>
             <div>
-              <label className="text-sm sm:text-base font-medium text-cyan-200">Team Email (for login)</label>
-              <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required className="rounded-lg border border-cyan-700 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400 transition shadow-sm bg-[#232526]/80 text-cyan-100 placeholder-cyan-400 text-base sm:text-lg" />
+              <label className="text-sm font-medium text-cyan-200">Team Email (for login)</label>
+              <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required className="rounded-lg border border-cyan-700 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400 transition shadow-sm bg-[#232526]/80 text-cyan-100 placeholder-cyan-400" />
             </div>
             <div>
-              <label className="text-sm sm:text-base font-medium text-cyan-200">Password</label>
-              <Input type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} required className="rounded-lg border border-cyan-700 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400 transition shadow-sm bg-[#232526]/80 text-cyan-100 placeholder-cyan-400 text-base sm:text-lg" />
+              <label className="text-sm font-medium text-cyan-200">Password</label>
+              <Input type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} required className="rounded-lg border border-cyan-700 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400 transition shadow-sm bg-[#232526]/80 text-cyan-100 placeholder-cyan-400" />
             </div>
             <div>
-              <label className="text-sm sm:text-base font-medium text-cyan-200">Confirm Password</label>
-              <Input type={showPassword ? "text" : "password"} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required className="rounded-lg border border-cyan-700 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400 transition shadow-sm bg-[#232526]/80 text-cyan-100 placeholder-cyan-400 text-base sm:text-lg" />
+              <label className="text-sm font-medium text-cyan-200">Confirm Password</label>
+              <Input type={showPassword ? "text" : "password"} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required className="rounded-lg border border-cyan-700 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400 transition shadow-sm bg-[#232526]/80 text-cyan-100 placeholder-cyan-400" />
             </div>
             <div className="flex items-center gap-2 mb-2">
               <input type="checkbox" id="showPassword" checked={showPassword} onChange={() => setShowPassword(v => !v)} className="accent-cyan-500 w-4 h-4" />
-              <label htmlFor="showPassword" className="text-cyan-100 text-xs sm:text-sm select-none">Show Password</label>
+              <label htmlFor="showPassword" className="text-cyan-100 text-sm select-none">Show Password</label>
             </div>
             <div>
-              <label className="text-sm sm:text-base font-medium text-cyan-200">Team Members Full Name (Lastname, Firstname)</label>
+              <label className="text-sm font-medium text-cyan-200">Team Members Full Name (Lastname, Firstname)</label>
               {members.map((member, idx) => (
-                <div key={idx} className="flex flex-col sm:flex-row gap-2 mb-2">
+                <div key={idx} className="flex gap-2 mb-2">
                   <Input
                     placeholder="Member Name"
                     value={member.name}
                     onChange={(e) => handleMemberChange(idx, "name", e.target.value)}
                     required
-                    className="rounded-lg border border-cyan-700 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400 transition shadow-sm bg-[#232526]/80 text-cyan-100 placeholder-cyan-400 text-base sm:text-lg"
+                    className="rounded-lg border border-cyan-700 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400 transition shadow-sm bg-[#232526]/80 text-cyan-100 placeholder-cyan-400"
                   />
                   <Input
                     placeholder="Member Email"
@@ -148,7 +150,7 @@ export default function Register() {
                     value={member.email}
                     onChange={(e) => handleMemberChange(idx, "email", e.target.value)}
                     required
-                    className="rounded-lg border border-cyan-700 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400 transition shadow-sm bg-[#232526]/80 text-cyan-100 placeholder-cyan-400 text-base sm:text-lg"
+                    className="rounded-lg border border-cyan-700 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400 transition shadow-sm bg-[#232526]/80 text-cyan-100 placeholder-cyan-400"
                   />
                   {members.length > 1 && (
                     <Button type="button" variant="destructive" onClick={() => removeMember(idx)}>
@@ -157,7 +159,7 @@ export default function Register() {
                   )}
                 </div>
               ))}
-              <Button type="button" onClick={addMember} className="mt-2 w-full sm:w-auto">Add Member</Button>
+              <Button type="button" onClick={addMember} className="mt-2">Add Member</Button>
             </div>
             <div className="flex items-center gap-2">
               <input
@@ -168,7 +170,7 @@ export default function Register() {
                 className="accent-cyan-500 w-4 h-4"
                 required
               />
-              <label htmlFor="agree" className="text-cyan-100 text-xs sm:text-sm select-none">
+              <label htmlFor="agree" className="text-cyan-100 text-sm select-none">
                 I have read and agree to the{' '}
                 <Dialog open={open} onOpenChange={setOpen}>
                   <DialogTrigger asChild>
@@ -215,7 +217,7 @@ export default function Register() {
             </div>
             <Button
               type="submit"
-              className="w-full py-3 rounded-lg bg-gradient-to-r from-cyan-500 via-blue-600 to-purple-600 text-white font-bold shadow-lg hover:scale-105 hover:shadow-2xl transition-all duration-200 border-2 border-cyan-400 text-base sm:text-lg"
+              className="w-full py-3 rounded-lg bg-gradient-to-r from-cyan-500 via-blue-600 to-purple-600 text-white font-bold shadow-lg hover:scale-105 hover:shadow-2xl transition-all duration-200 border-2 border-cyan-400"
               disabled={isLoading || !agreed}
             >
               {isLoading ? "Registering..." : "Register Team"}
