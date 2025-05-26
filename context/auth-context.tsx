@@ -12,6 +12,7 @@ export type User = {
   email: string
   teamName?: string
   role: UserRole
+  status: string
 } | null
 
 type AuthContextType = {

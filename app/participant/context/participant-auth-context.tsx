@@ -15,6 +15,7 @@ export type Participant = {
   teamId: string
   teamName: string
   role: string
+  status: string
 } | null
 
 // Define auth context type

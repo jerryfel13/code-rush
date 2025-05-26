@@ -54,6 +54,7 @@ export function TeamsList() {
             teamsData.push({
               id: data.id,
               name: data.teamName,
+              email: data.email,
               members: data.members ? data.members.map((m: any) => m.name).join(", ") : "",
               status: data.status || "Registered",
               score: data.score || null,
@@ -70,7 +71,6 @@ export function TeamsList() {
       team.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       team.members.toLowerCase().includes(searchQuery.toLowerCase()),
   )
-
   const handleMemberChange = (idx: number, field: 'name' | 'email', value: string) => {
     setTeamMembers((prev) => {
       const updated = [...prev]
@@ -125,7 +125,7 @@ export function TeamsList() {
       // Convert comma-separated string to array of objects with empty emails
       membersArr = membersArr.split(",").map((name: string) => ({ name: name.trim(), email: "" }))
     }
-    setSelectedTeam({ ...team, members: membersArr })
+    setSelectedTeam({ ...team, members: membersArr, email: team.email })
     setIsEditTeamOpen(true)
   }
 
@@ -151,6 +151,17 @@ export function TeamsList() {
           : [],
         status: selectedTeam.status,
       })
+      // Send activation email if status is set to Active
+      if (selectedTeam.status === "Active" && selectedTeam.email) {
+        await fetch('/api/send-activation-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: selectedTeam.email,
+            teamName: selectedTeam.name,
+          }),
+        })
+      }
       toast({
         title: "Team Updated",
         description: `Team "${selectedTeam.name}" has been updated successfully.`,
@@ -401,7 +412,6 @@ export function TeamsList() {
                   <SelectContent>
                     <SelectItem value="Registered">Registered</SelectItem>
                     <SelectItem value="Active">Active</SelectItem>
-                    <SelectItem value="Completed">Completed</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

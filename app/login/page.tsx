@@ -29,8 +29,7 @@ export default function Login() {
 
       if (response.error) {
         toast({
-          title: "Login Failed",
-          description: response.error,
+          title: "Login Failed, Please check your credentials",
           variant: "destructive",
         })
         return
@@ -39,12 +38,21 @@ export default function Login() {
       if (response.user) {
         // Store user data in appropriate context based on role
         if (response.user.role === "participant") {
+          if (response.user.status !== "Active") {
+            toast({
+              title: "Account Not Yet Activated",
+              description: "Your team registration is pending approval. Please wait for an admin to activate your account.",
+              variant: "destructive",
+            });
+            return;
+          }
           loginParticipant({
             id: response.user.id,
             name: response.user.name,
             email: response.user.email,
             teamId: response.user.id,
-            teamName: response.user.teamName,
+            teamName: response.user.teamName ?? "",
+            status: response.user.status,
             role: response.user.role
           })
         } else {
@@ -55,7 +63,6 @@ export default function Login() {
           title: "Login Successful",
           description: `Welcome back, ${response.user.name}!`,
         })
-        console.log("user:",response.user);
         // Redirect based on role
         switch (response.user.role) {
           case "admin":
@@ -77,8 +84,7 @@ export default function Login() {
       }
     } catch (error: any) {
       toast({
-        title: "Login Failed",
-        description: error.message || "An error occurred during login",
+        title: "Login Failed, Please check your credentials",
         variant: "destructive",
       })
     } finally {
@@ -143,6 +149,9 @@ export default function Login() {
               {isLoading ? "Logging in..." : "Login"}
             </Button>
           </form>
+          <div className="mt-6 text-center">
+         
+          </div>
         </CardContent>
       </Card>
     </div>

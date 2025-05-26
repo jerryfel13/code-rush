@@ -75,14 +75,25 @@ export function ParticipantInterface() {
 
   // Check if a round is locked
   const isRoundLocked = (round: string) => {
-    if (round === "easy") return false
+    if (round === "easy") {
+      // Lock easy round if all easy questions are completed
+      return Object.keys(completedQuestions.easy).length === easyQuestions.length && easyQuestions.length > 0;
+    }
     if (round === "medium") {
-      return Object.keys(completedQuestions.easy).length < easyQuestions.length
+      // Unlock medium if all easy are done, lock if all medium are done
+      if (Object.keys(completedQuestions.easy).length === easyQuestions.length && easyQuestions.length > 0) {
+        return Object.keys(completedQuestions.medium).length === mediumQuestions.length && mediumQuestions.length > 0;
+      }
+      return true;
     }
     if (round === "hard") {
-      return Object.keys(completedQuestions.medium).length < mediumQuestions.length
+      // Unlock hard if all medium are done, lock if all hard are done
+      if (Object.keys(completedQuestions.medium).length === mediumQuestions.length && mediumQuestions.length > 0) {
+        return Object.keys(completedQuestions.hard).length === hardQuestions.length && hardQuestions.length > 0;
+      }
+      return true;
     }
-    return true
+    return true;
   }
 
   // Check if a question is locked
@@ -113,7 +124,7 @@ export function ParticipantInterface() {
   useEffect(() => {
     const mapTimeFromProgress = async () => {
       if (!participant?.id || !currentQuestion?.id) return;
-      if (activeRound === "easy") {
+    if (activeRound === "easy") {
        
         const progressRef = doc(
           collection(db, "participant_progress"),
@@ -122,20 +133,18 @@ export function ParticipantInterface() {
         const progressSnap = await getDoc(progressRef);
         if (progressSnap.exists()) {
           const data = progressSnap.data();
-          console.log("1", data);
           if (data.timer && typeof data.timer.remainingTime === "number") {
             setTimeRemaining(data.timer.remainingTime * 60);
           } else {
-            console.log("2", data);
             setTimeRemaining(30 * 60);
           }
         }
-      } else if (activeRound === "medium") {
+    } else if (activeRound === "medium") {
         setTimeRemaining(15 * 60);
-      } else if (activeRound === "hard") {
-        if (activeQuestionIndex < 2) {
+    } else if (activeRound === "hard") {
+      if (activeQuestionIndex < 2) {
           setTimeRemaining(10 * 60);
-        } else {
+      } else {
           setTimeRemaining(5 * 60);
         }
       }
@@ -162,10 +171,18 @@ export function ParticipantInterface() {
       );
       const snapshot = await getDocs(qProgress);
       const map: { [questionId: string]: any } = {};
+      const completed: { easy: any, medium: any, hard: any } = { easy: {}, medium: {}, hard: {} };
       snapshot.forEach(doc => {
-        map[doc.data().questionId] = doc.data();
+        const data = doc.data();
+        map[data.questionId] = data;
+        if (data.status === "correct") {
+          if (data.round === "easy") completed.easy[data.order - 1] = true;
+          if (data.round === "medium") completed.medium[data.order - 1] = true;
+          if (data.round === "hard") completed.hard[data.order - 1] = true;
+        }
       });
       setProgressMap(map);
+      setCompletedQuestions(completed);
     };
     fetchProgress();
   }, [participant, questions]);
@@ -192,7 +209,10 @@ export function ParticipantInterface() {
       title: "Time's Up!",
       description: "The time for this question has expired.",
       variant: "destructive",
-    })
+    });
+    // Save timer state when time is up
+    saveTimerState(0, true);
+    setIsTimerPaused(true); // Pause timer when time is up
   }
 
   const handleRoundChange = (round: string) => {
@@ -205,8 +225,8 @@ export function ParticipantInterface() {
       toast({
         title: "Round Locked",
         description: "Complete the previous round to unlock this one.",
-        variant: "destructive",
-      })
+      variant: "destructive",
+    })
     }
   }
 
@@ -214,20 +234,24 @@ export function ParticipantInterface() {
     if (!isQuestionLocked(activeRound, index)) {
       setActiveQuestionIndex(index);
       setAnswer("");
-      setWaitingForJudge(false);
       const questionId = roundQuestions[index].id;
       const progress = progressMap[questionId];
       if (progress?.status === "correct") {
-        setStarted(true);
+        setStarted(false);
         setIsTimerPaused(true);
-        // Enable the next question if it exists
-        const nextIndex = index + 1;
-        if (nextIndex < roundQuestions.length && !isQuestionLocked(activeRound, nextIndex)) {
-          setActiveQuestionIndex(nextIndex);
-        }
+        setWaitingForJudge(false);
+      } else if (progress?.status === "pending") {
+        setStarted(false);
+        setIsTimerPaused(true);
+        setWaitingForJudge(true);
+      } else if (progress?.status === "wrong") {
+        setStarted(true);
+        setIsTimerPaused(false);
+        setWaitingForJudge(false);
       } else {
         setStarted(false);
         setIsTimerPaused(false);
+        setWaitingForJudge(false);
       }
     } else {
       toast({
@@ -249,6 +273,7 @@ export function ParticipantInterface() {
       );
       await setDoc(progressRef, {
         participantId: participant.id,
+        teamName: participant.teamName,
         questionId: currentQuestion.id,
         answer: "", // No answer input
         status: "pending",
@@ -267,6 +292,8 @@ export function ParticipantInterface() {
         description: "The judge has been notified that you are ready for checking.",
       });
       updateProgressForCurrent("pending");
+      // Save timer state on submit
+      saveTimerState(easyTimeRemaining, true);
     } catch (error) {
       toast({
         title: "Error",
@@ -305,7 +332,7 @@ export function ParticipantInterface() {
             });
             setWaitingForJudge(false);
             setAnswer("");
-            setIsTimerPaused(false); // Resume for next question
+            setIsTimerPaused(true); // Pause timer when completed
             const nextIndex = activeQuestionIndex + 1;
             if (nextIndex < roundQuestions.length) {
               // Map the timer for the next question from Firestore
@@ -368,7 +395,7 @@ export function ParticipantInterface() {
   // Timer tick handler for easy round
   const handleEasyTick = (remaining: number) => {
     setEasyTimeRemaining(remaining);
-    saveTimerState(remaining, isTimerPaused);
+    // No saveTimerState here to avoid excessive writes
   };
 
   // Pause timer on unload and save remaining time
@@ -453,7 +480,6 @@ export function ParticipantInterface() {
       const data = progressSnap.data();
       if (data.timer && typeof data.timer.remainingTime === "number") {
         resumeTime = data.timer.remainingTime;
-        console.log("resumeTime", resumeTime);
       } else {
         resumeTime = 30 * 60;
       }
@@ -477,6 +503,11 @@ export function ParticipantInterface() {
       { merge: true }
     );
   };
+
+  // Calculate progress for each round
+  const easyCorrect = Object.keys(completedQuestions.easy).length;
+  const mediumCorrect = Object.keys(completedQuestions.medium).length;
+  const hardCorrect = Object.keys(completedQuestions.hard).length;
 
   if (loadingQuestions) {
     return (
@@ -522,27 +553,39 @@ export function ParticipantInterface() {
               <TabsList className="grid grid-cols-3 bg-[#181c24]/80 border border-cyan-700/40">
                 <TabsTrigger 
                   value="easy" 
-                  className="data-[state=active]:bg-cyan-900/30 data-[state=active]:text-cyan-300"
+                  className={`data-[state=active]:bg-cyan-900/30 data-[state=active]:text-cyan-300 flex items-center gap-2`}
                 >
                   Easy Round
+                  <span className="ml-1 text-xs text-cyan-400">{easyCorrect}/{easyQuestions.length}</span>
+                  {easyCorrect === easyQuestions.length && easyQuestions.length > 0 && (
+                    <CheckCircle2 className="h-4 w-4 text-green-400 ml-1" />
+                  )}
                 </TabsTrigger>
                 <TabsTrigger 
                   value="medium" 
-                  className={`data-[state=active]:bg-cyan-900/30 data-[state=active]:text-cyan-300 ${isRoundLocked("medium") ? "opacity-50 cursor-not-allowed" : ""}`}
+                  className={`data-[state=active]:bg-cyan-900/30 data-[state=active]:text-cyan-300 flex items-center gap-2 ${isRoundLocked("medium") ? "opacity-50 cursor-not-allowed" : ""}`}
                   disabled={isRoundLocked("medium")}
                 >
                   <div className="flex items-center gap-2">
                     Medium Round
+                    <span className="ml-1 text-xs text-cyan-400">{mediumCorrect}/{mediumQuestions.length}</span>
+                    {mediumCorrect === mediumQuestions.length && mediumQuestions.length > 0 && (
+                      <CheckCircle2 className="h-4 w-4 text-green-400 ml-1" />
+                    )}
                     {isRoundLocked("medium") && <Lock className="h-4 w-4" />}
                   </div>
                 </TabsTrigger>
                 <TabsTrigger 
                   value="hard" 
-                  className={`data-[state=active]:bg-cyan-900/30 data-[state=active]:text-cyan-300 ${isRoundLocked("hard") ? "opacity-50 cursor-not-allowed" : ""}`}
+                  className={`data-[state=active]:bg-cyan-900/30 data-[state=active]:text-cyan-300 flex items-center gap-2 ${isRoundLocked("hard") ? "opacity-50 cursor-not-allowed" : ""}`}
                   disabled={isRoundLocked("hard")}
                 >
                   <div className="flex items-center gap-2">
                     Hard Round
+                    <span className="ml-1 text-xs text-cyan-400">{hardCorrect}/{hardQuestions.length}</span>
+                    {hardCorrect === hardQuestions.length && hardQuestions.length > 0 && (
+                      <CheckCircle2 className="h-4 w-4 text-green-400 ml-1" />
+                    )}
                     {isRoundLocked("hard") && <Lock className="h-4 w-4" />}
                   </div>
                 </TabsTrigger>
@@ -553,26 +596,28 @@ export function ParticipantInterface() {
                 const progress = progressMap[question.id];
                 const status = progress?.status || "not started";
                 return (
-                  <Button
+                <Button
                     key={question.id || index}
-                    variant={index === activeQuestionIndex ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => handleQuestionChange(index)}
+                  variant={index === activeQuestionIndex ? "default" : "outline"}
+                  size="sm"
+                    onClick={() => {
+                      if (index !== activeQuestionIndex) handleQuestionChange(index);
+                    }}
                     className={`${
                       index === activeQuestionIndex 
                         ? "bg-cyan-900/30 border-cyan-400 text-cyan-300" 
                         : "border-cyan-700/40 text-cyan-200 hover:bg-cyan-900/20"
                     } ${isQuestionLocked(activeRound, index) ? "opacity-50 cursor-not-allowed" : ""}`}
                     disabled={isQuestionLocked(activeRound, index)}
-                  >
+                >
                     <div className="flex items-center gap-2">
-                      Question {index + 1}
+                  Question {index + 1}
                       {status === "pending" && <span className="text-yellow-400 ml-1">⏳</span>}
                       {status === "correct" && <CheckCircle2 className="h-4 w-4 text-green-400" />}
                       {status === "wrong" && <span className="text-red-400 ml-1">✗</span>}
                       {status === "not started" && <span className="text-gray-400 ml-1">•</span>}
                     </div>
-                  </Button>
+                </Button>
                 );
               })}
             </div>
@@ -599,7 +644,13 @@ export function ParticipantInterface() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    {!started ? (
+                    {progressMap[currentQuestion.id]?.status === "correct" ? (
+                      <p className="text-green-400">Question completed!</p>
+                    ) : progressMap[currentQuestion.id]?.status === "pending" ? (
+                      <Button disabled className="w-full bg-gradient-to-r from-cyan-500 via-blue-600 to-purple-600 text-white font-bold">
+                        Waiting for Judge...
+                      </Button>
+                    ) : !started ? (
                       <Button
                         onClick={handleStart}
                         className="w-full bg-gradient-to-r from-green-400 to-blue-500 text-white font-bold"
@@ -607,41 +658,14 @@ export function ParticipantInterface() {
                         Start
                       </Button>
                     ) : (
-                      progressMap[currentQuestion.id]?.status === "correct" ? (
-                        <p className="text-green-400">Question completed!</p>
-                      ) : (
-                        <Button
-                          onClick={handleReadyForValidation}
-                          disabled={isSubmitting || waitingForJudge}
-                          className="w-full bg-gradient-to-r from-cyan-500 via-blue-600 to-purple-600 text-white font-bold"
-                        >
-                          {isSubmitting
-                            ? "Submitting..."
-                            : waitingForJudge
-                            ? "Waiting for Judge..."
-                            : "Answer is Ready"}
-                        </Button>
-                      )
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="bg-[#181c24]/80 border border-cyan-700/40">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-cyan-300">
-                    <MessageSquare className="h-5 w-5" />
-                    Ask for Help
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex gap-2">
-                    <Input 
-                      placeholder="Type your question here..." 
-                      className="bg-[#232526]/80 border-cyan-700/40 text-cyan-100 placeholder:text-cyan-400/50"
-                    />
-                    <Button variant="outline" className="border-cyan-400 text-cyan-200 hover:bg-cyan-900/20">
-                      <Send className="h-4 w-4" />
+                      <Button
+                        onClick={handleReadyForValidation}
+                        disabled={isSubmitting || waitingForJudge}
+                        className="w-full bg-gradient-to-r from-cyan-500 via-blue-600 to-purple-600 text-white font-bold"
+                      >
+                        {isSubmitting ? "Submitting..." : "Answer is Ready"}
                     </Button>
+                    )}
                   </div>
                 </CardContent>
               </Card>

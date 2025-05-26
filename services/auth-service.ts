@@ -12,7 +12,6 @@ export async function loginUser(email: string, password: string): Promise<{ user
 
     // Get user data from Firestore
     const userDoc = await getDoc(doc(db, "users", firebaseUser.uid))
-    console.log(userDoc.data());
     if (!userDoc.exists()) {
       toast.error("User data not found");
       return { user: null, error: "User data not found" }
@@ -27,6 +26,7 @@ export async function loginUser(email: string, password: string): Promise<{ user
       email: userData.email,
       role: userData.role,
       teamName: userData.teamName,
+      status: userData.status,
     }
 
     return { user }

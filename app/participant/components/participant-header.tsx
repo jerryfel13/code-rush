@@ -23,7 +23,7 @@ export function ParticipantHeader({ participant, onLogout }: ParticipantHeaderPr
       <div className="container mx-auto px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Code className="h-6 w-6 text-cyan-400 drop-shadow" />
-          <span className="font-bold text-xl text-cyan-300 drop-shadow">CodeCompete</span>
+          <span className="font-bold text-xl text-cyan-300 drop-shadow">Code Rush</span>
           <span className="text-sm text-purple-300 ml-2 drop-shadow">Participant Portal</span>
         </div>
 

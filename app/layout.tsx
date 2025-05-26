@@ -29,10 +29,10 @@ export default function RootLayout({
         >
           <AuthProvider>
             <ParticipantAuthProvider>
-              <div className="min-h-screen flex flex-col">
-                {children}
-                <Toaster />
-              </div>
+            <div className="min-h-screen flex flex-col">
+              {children}
+              <Toaster />
+            </div>
             </ParticipantAuthProvider>
           </AuthProvider>
         </ThemeProvider>
