@@ -6,8 +6,8 @@ const transporter = nodemailer.createTransport({
   port: 587,
   secure: false,
   auth: {
-    user: "yourfel13@gmail.com",
-    pass: "lrtx sust rbmo nrpz",
+    user: process.env.GMAIL_USER,
+    pass: process.env.GMAIL_PASS,
   },
 });
 
@@ -18,7 +18,7 @@ export async function POST(request: Request) {
     const mailOptions = {
       from: {
         name: "Code Rush No-reply",
-        address: "yourfel13@gmail.com",
+        address: process.env.GMAIL_USER,
       },
       to: email,
       subject: "Code Rush Registration Received",
