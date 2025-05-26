@@ -120,7 +120,7 @@ export async function POST(request: Request) {
               <h3>What's Next?</h3>
               <p>Please wait for an admin to review and activate your registration. You will receive another email once your account is activated.</p>
               <p>Once the competition starts, you can log in using the button below:</p>
-              <a href="https://coderush.vercel.app/login" class="button">Go to Login</a>
+              <a href="https://code-rush-one.vercel.app/login" class="button">Go to Login</a>
               <p style="font-size:13px;color:#888;margin-top:8px;">(The login will be active once the competition begins.)</p>
             </div>
             <div class="mechanics">

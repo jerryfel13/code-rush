@@ -32,7 +32,7 @@ export async function POST(request: Request) {
             <p>Hi <b>${teamName}</b>,</p>
             <p>Your team's registration for <b>Code Rush</b> has been <span style="color: #388e3c; font-weight: bold;">activated</span> by the admin. You can now log in and participate in the competition!</p>
             <div style="text-align: center; margin: 30px 0;">
-              <a href="https://coderush.vercel.app/login" style="display: inline-block; padding: 12px 24px; background: linear-gradient(135deg, #2c5364 0%, #203a43 100%); color: white; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 16px;">Go to Login</a>
+              <a href="https://code-rush-one.vercel.app/login" style="display: inline-block; padding: 12px 24px; background: linear-gradient(135deg, #2c5364 0%, #203a43 100%); color: white; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 16px;">Go to Login</a>
             </div>
             <p style="color: #666; font-size: 13px;">If you have any questions, reply to this email or contact the organizers.</p>
             <p style="font-size: 12px; color: #999;">This is an automated message, please do not reply.</p>
