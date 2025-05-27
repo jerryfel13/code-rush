@@ -39,10 +39,13 @@ export function ParticipantInterface() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [waitingForJudge, setWaitingForJudge] = useState(false)
   const [isTimerPaused, setIsTimerPaused] = useState(false);
-  const [easyTimeRemaining, setEasyTimeRemaining] = useState(30 * 60); // 30 minutes in seconds
+  const [easyTimeRemaining, setEasyTimeRemaining] = useState(15 * 60); // 15 minutes
+  const [mediumTimeRemaining, setMediumTimeRemaining] = useState(20 * 60); // 20 minutes
+  const [hardTimeRemaining, setHardTimeRemaining] = useState(25 * 60); // 25 minutes (default for first two)
   const [progressMap, setProgressMap] = useState<{ [questionId: string]: any }>({});
   const [progressLoading, setProgressLoading] = useState(true);
   const [started, setStarted] = useState(false);
+  const [skippedQuestions, setSkippedQuestions] = useState<{ [key: string]: boolean }>({});
 
   useEffect(() => {
     const fetchQuestions = async () => {
@@ -136,7 +139,7 @@ export function ParticipantInterface() {
           if (data.timer && typeof data.timer.remainingTime === "number") {
             setTimeRemaining(data.timer.remainingTime * 60);
           } else {
-            setTimeRemaining(30 * 60);
+            setTimeRemaining(15 * 60);
           }
         }
     } else if (activeRound === "medium") {
@@ -152,14 +155,6 @@ export function ParticipantInterface() {
     mapTimeFromProgress();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [participant?.id, currentQuestion?.id, activeRound, activeQuestionIndex]);
-
-  // When question changes, reset timer for easy round
-  useEffect(() => {
-    if (activeRound === "easy") {
-      setEasyTimeRemaining(30 * 60);
-      setIsTimerPaused(false);
-    }
-  }, [activeRound, activeQuestionIndex]);
 
   // Fetch all progress for the participant
   useEffect(() => {
@@ -187,6 +182,14 @@ export function ParticipantInterface() {
     fetchProgress();
   }, [participant, questions]);
 
+  // Helper to get points for a question based on round
+  const getPointsForCurrentQuestion = () => {
+    if (activeRound === "easy") return 2;
+    if (activeRound === "medium") return 4;
+    if (activeRound === "hard") return 6;
+    return 0;
+  };
+
   // Update progressMap after judge feedback or submission
   const updateProgressForCurrent = (status: string) => {
     if (!currentQuestion) return;
@@ -197,6 +200,21 @@ export function ParticipantInterface() {
         status,
       },
     }));
+    // Save points for correct questions
+    if (status === "correct") {
+      if (participant && currentQuestion) {
+        const progressRef = doc(
+          collection(db, "participant_progress"),
+          `${participant.id}_${currentQuestion.id}`
+        );
+        setDoc(progressRef, {
+          points: getPointsForCurrentQuestion(),
+          updatedAt: new Date().toISOString(),
+        }, { merge: true });
+      }
+    } else {
+      savePointsToProgress();
+    }
   };
 
   const handleLogout = () => {
@@ -213,9 +231,37 @@ export function ParticipantInterface() {
     // Save timer state when time is up
     saveTimerState(0, true);
     setIsTimerPaused(true); // Pause timer when time is up
+    // Save 0 points for this question
+    if (participant && currentQuestion) {
+      const progressRef = doc(
+        collection(db, "participant_progress"),
+        `${participant.id}_${currentQuestion.id}`
+      );
+      setDoc(progressRef, {
+        points: 0,
+        updatedAt: new Date().toISOString(),
+      }, { merge: true });
+    }
   }
 
   const handleRoundChange = (round: string) => {
+    // Check if the round is finished (all questions completed)
+    let isFinished = false;
+    if (round === "easy") {
+      isFinished = easyQuestions.length > 0 && Object.keys(completedQuestions.easy).length === easyQuestions.length;
+    } else if (round === "medium") {
+      isFinished = mediumQuestions.length > 0 && Object.keys(completedQuestions.medium).length === mediumQuestions.length;
+    } else if (round === "hard") {
+      isFinished = hardQuestions.length > 0 && Object.keys(completedQuestions.hard).length === hardQuestions.length;
+    }
+    if (isFinished) {
+      toast({
+        title: "This round is already finished.",
+        description: "You have completed all questions in this round.",
+        variant: "default",
+      });
+      return;
+    }
     if (!isRoundLocked(round)) {
       setActiveRound(round)
       setActiveQuestionIndex(0)
@@ -225,8 +271,8 @@ export function ParticipantInterface() {
       toast({
         title: "Round Locked",
         description: "Complete the previous round to unlock this one.",
-      variant: "destructive",
-    })
+        variant: "destructive",
+      })
     }
   }
 
@@ -234,25 +280,6 @@ export function ParticipantInterface() {
     if (!isQuestionLocked(activeRound, index)) {
       setActiveQuestionIndex(index);
       setAnswer("");
-      const questionId = roundQuestions[index].id;
-      const progress = progressMap[questionId];
-      if (progress?.status === "correct") {
-        setStarted(false);
-        setIsTimerPaused(true);
-        setWaitingForJudge(false);
-      } else if (progress?.status === "pending") {
-        setStarted(false);
-        setIsTimerPaused(true);
-        setWaitingForJudge(true);
-      } else if (progress?.status === "wrong") {
-        setStarted(true);
-        setIsTimerPaused(false);
-        setWaitingForJudge(false);
-      } else {
-        setStarted(false);
-        setIsTimerPaused(false);
-        setWaitingForJudge(false);
-      }
     } else {
       toast({
         title: "Question Locked",
@@ -279,7 +306,7 @@ export function ParticipantInterface() {
         status: "pending",
         round: activeRound,
         timer: {
-          remainingTime: easyTimeRemaining,
+          remainingTime: getCurrentTimeRemaining(),
           isPaused: false,
         },
         order: currentQuestion.order,
@@ -293,7 +320,7 @@ export function ParticipantInterface() {
       });
       updateProgressForCurrent("pending");
       // Save timer state on submit
-      saveTimerState(easyTimeRemaining, true);
+      saveTimerState(getCurrentTimeRemaining(), true);
     } catch (error) {
       toast({
         title: "Error",
@@ -348,15 +375,25 @@ export function ParticipantInterface() {
                 if (data.timer && typeof data.timer.remainingTime === "number") {
                   nextTime = data.timer.remainingTime;
                 } else {
-                  nextTime = 30 * 60;
+                  nextTime = 15 * 60;
                 }
               } else {
-                nextTime = 30 * 60;
+                nextTime = 15 * 60;
               }
               setActiveQuestionIndex(nextIndex);
-              setEasyTimeRemaining(nextTime);
+              setCurrentTimeRemaining(nextTime);
             }
             updateProgressForCurrent("correct");
+            if (participant && currentQuestion) {
+              const progressRef = doc(
+                collection(db, "participant_progress"),
+                `${participant.id}_${currentQuestion.id}`
+              );
+              await setDoc(progressRef, {
+                points: getPointsForCurrentQuestion(),
+                updatedAt: new Date().toISOString(),
+              }, { merge: true });
+            }
             clearInterval(interval);
           } else if (status === "wrong") {
             toast({
@@ -394,7 +431,7 @@ export function ParticipantInterface() {
 
   // Timer tick handler for easy round
   const handleEasyTick = (remaining: number) => {
-    setEasyTimeRemaining(remaining);
+    setCurrentTimeRemaining(remaining);
     // No saveTimerState here to avoid excessive writes
   };
 
@@ -402,12 +439,12 @@ export function ParticipantInterface() {
   useEffect(() => {
     const handleBeforeUnload = () => {
       if (activeRound === "easy" && !isTimerPaused) {
-        saveTimerState(easyTimeRemaining, true);
+        saveTimerState(getCurrentTimeRemaining(), true);
       }
     };
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [activeRound, isTimerPaused, easyTimeRemaining]);
+  }, [activeRound, isTimerPaused]);
 
   // When question changes, load timer state and status from Firestore if it exists
   useEffect(() => {
@@ -422,7 +459,7 @@ export function ParticipantInterface() {
         `${participant.id}_${currentQuestion.id}`
       );
       const progressSnap = await getDoc(progressRef);
-      let timerValue = 30 * 60;
+      let timerValue = 15 * 60;
       let pausedValue = true;
       let waitingValue = false;
       let statusValue = "not started";
@@ -430,26 +467,31 @@ export function ParticipantInterface() {
       if (progressSnap.exists()) {
         const data = progressSnap.data();
         if (data.timer && typeof data.timer.remainingTime === "number") {
-          setEasyTimeRemaining(data.timer.remainingTime);
-          pausedValue = data.timer.isPaused ?? true;
+          setCurrentTimeRemaining(data.timer.remainingTime);
         }
         statusValue = data.status;
         startedValue = data.started ?? false;
-        if (data.status === "pending") {
-          waitingValue = true;
-          pausedValue = true;
-          startedValue = false;
-        } else if (data.status === "wrong") {
-          waitingValue = false;
-          pausedValue = false;
-          startedValue = true;
+        if (data.status === "skipped" || data.status === "not started") {
+          setStarted(false);
+          setIsTimerPaused(true);
+        } else if (data.status === "correct" || data.status === "pending") {
+          setStarted(false);
+          setIsTimerPaused(true);
+        } else {
+          setStarted(true);
+          setIsTimerPaused(false);
         }
       } else {
-        setEasyTimeRemaining(30 * 60); // Set timer to 30:00 if no progress
+        if (activeRound === "easy") setEasyTimeRemaining(15 * 60);
+        if (activeRound === "medium") setMediumTimeRemaining(20 * 60);
+        if (activeRound === "hard") {
+          if (activeQuestionIndex < 2) setHardTimeRemaining(25 * 60);
+          else setHardTimeRemaining(30 * 60);
+        }
+        setStarted(false);
+        setIsTimerPaused(true);
       }
-      setIsTimerPaused(pausedValue);
       setWaitingForJudge(waitingValue);
-      setStarted(startedValue);
       setProgressMap(prev => ({
         ...prev,
         [currentQuestion.id]: {
@@ -467,30 +509,32 @@ export function ParticipantInterface() {
 
   const handleStart = async () => {
     if (!participant || !currentQuestion) return;
-
     // Fetch the latest progress for this question
     const progressRef = doc(
       collection(db, "participant_progress"),
       `${participant.id}_${currentQuestion.id}`
     );
     const progressSnap = await getDoc(progressRef);
-
     let resumeTime: number;
     if (progressSnap.exists()) {
       const data = progressSnap.data();
       if (data.timer && typeof data.timer.remainingTime === "number") {
         resumeTime = data.timer.remainingTime;
       } else {
-        resumeTime = 30 * 60;
+        if (activeRound === "easy") resumeTime = 15 * 60;
+        else if (activeRound === "medium") resumeTime = 20 * 60;
+        else if (activeRound === "hard") resumeTime = (activeQuestionIndex < 2 ? 25 * 60 : 30 * 60);
+        else resumeTime = 0;
       }
     } else {
-      resumeTime = 30 * 60;
+      if (activeRound === "easy") resumeTime = 15 * 60;
+      else if (activeRound === "medium") resumeTime = 20 * 60;
+      else if (activeRound === "hard") resumeTime = (activeQuestionIndex < 2 ? 25 * 60 : 30 * 60);
+      else resumeTime = 0;
     }
-
     setStarted(true);
     setIsTimerPaused(false);
-    setEasyTimeRemaining(resumeTime);
-
+    setCurrentTimeRemaining(resumeTime);
     await setDoc(
       progressRef,
       {
@@ -508,6 +552,95 @@ export function ParticipantInterface() {
   const easyCorrect = Object.keys(completedQuestions.easy).length;
   const mediumCorrect = Object.keys(completedQuestions.medium).length;
   const hardCorrect = Object.keys(completedQuestions.hard).length;
+
+  // Calculate points for each round
+  const easyPoints = Object.keys(completedQuestions.easy).length * 2;
+  const mediumPoints = Object.keys(completedQuestions.medium).length * 4;
+  const hardPoints = Object.keys(completedQuestions.hard).length * 6;
+  const totalPoints = easyPoints + mediumPoints + hardPoints;
+
+  // Add handler for pass/skip
+  const handlePassSkip = async () => {
+    if (!participant || !currentQuestion) return;
+    // Save timer state and mark as skipped
+    await saveTimerState(getCurrentTimeRemaining(), true);
+    setSkippedQuestions(prev => ({ ...prev, [currentQuestion.id]: true }));
+    // Save skipped status in progress
+    const progressRef = doc(
+      collection(db, "participant_progress"),
+      `${participant.id}_${currentQuestion.id}`
+    );
+    await setDoc(progressRef, {
+      participantId: participant.id,
+      teamName: participant.teamName,
+      questionId: currentQuestion.id,
+      status: "skipped",
+      round: activeRound,
+      timer: {
+        remainingTime: getCurrentTimeRemaining(),
+        isPaused: true,
+      },
+      order: currentQuestion.order,
+      updatedAt: new Date().toISOString(),
+    }, { merge: true });
+    // Move to next question if available
+    const nextIndex = activeQuestionIndex + 1;
+    if (nextIndex < roundQuestions.length) {
+      setActiveQuestionIndex(nextIndex);
+      setStarted(false);
+      setIsTimerPaused(true);
+    } else {
+      // If no more questions, stay on current
+      setIsTimerPaused(true);
+    }
+  };
+
+  // Update progressMap to include skipped status
+  useEffect(() => {
+    if (!participant || !questions.length) return;
+    const updateSkipped = async () => {
+      const qProgress = query(
+        collection(db, "participant_progress"),
+        where("participantId", "==", participant.id)
+      );
+      const snapshot = await getDocs(qProgress);
+      const skipped: { [key: string]: boolean } = {};
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        if (data.status === "skipped") {
+          skipped[data.questionId] = true;
+        }
+      });
+      setSkippedQuestions(skipped);
+    };
+    updateSkipped();
+  }, [participant, questions]);
+
+  // Helper to get/set the correct timer for the current round
+  const getCurrentTimeRemaining = () => {
+    if (activeRound === "easy") return easyTimeRemaining;
+    if (activeRound === "medium") return mediumTimeRemaining;
+    if (activeRound === "hard") return hardTimeRemaining;
+    return 0;
+  };
+  const setCurrentTimeRemaining = (val: number) => {
+    if (activeRound === "easy") setEasyTimeRemaining(val);
+    if (activeRound === "medium") setMediumTimeRemaining(val);
+    if (activeRound === "hard") setHardTimeRemaining(val);
+  };
+
+  // Helper to save points to Firestore for the current question
+  const savePointsToProgress = async () => {
+    if (!participant || !currentQuestion) return;
+    const progressRef = doc(
+      collection(db, "participant_progress"),
+      `${participant.id}_${currentQuestion.id}`
+    );
+    await setDoc(progressRef, {
+      points: totalPoints,
+      updatedAt: new Date().toISOString(),
+    }, { merge: true });
+  };
 
   if (loadingQuestions) {
     return (
@@ -539,13 +672,14 @@ export function ParticipantInterface() {
                 <p className="text-cyan-300/80">
                   Team: {participant?.teamName} | Participant: {participant?.name}
                 </p>
+                <p className="text-cyan-400 font-semibold mt-1">Total Points: <span className="text-green-400">{totalPoints}</span></p>
               </div>
-              {activeRound === "easy" && !isTimerPaused && (
+              {["easy", "medium", "hard"].includes(activeRound) && (
                 <Timer
-                  time={easyTimeRemaining}
+                  time={getCurrentTimeRemaining()}
                   isPaused={!started || isTimerPaused}
                   onTimeUp={handleTimeUp}
-                  onTick={handleEasyTick}
+                  onTick={val => setCurrentTimeRemaining(val)}
                 />
               )}
             </div>
@@ -615,7 +749,8 @@ export function ParticipantInterface() {
                       {status === "pending" && <span className="text-yellow-400 ml-1">⏳</span>}
                       {status === "correct" && <CheckCircle2 className="h-4 w-4 text-green-400" />}
                       {status === "wrong" && <span className="text-red-400 ml-1">✗</span>}
-                      {status === "not started" && <span className="text-gray-400 ml-1">•</span>}
+                      {skippedQuestions[question.id] && <span className="text-orange-400 ml-1">⏭️</span>}
+                      {status === "not started" && !skippedQuestions[question.id] && <span className="text-gray-400 ml-1">•</span>}
                     </div>
                 </Button>
                 );
@@ -652,19 +787,50 @@ export function ParticipantInterface() {
                       </Button>
                     ) : !started ? (
                       <Button
-                        onClick={handleStart}
+                        onClick={async () => {
+                          // If the question was skipped, set status to 'in progress' but do not reset the timer
+                          if (progressMap[currentQuestion.id]?.status === "skipped") {
+                            if (participant && currentQuestion) {
+                              const progressRef = doc(
+                                collection(db, "participant_progress"),
+                                `${participant.id}_${currentQuestion.id}`
+                              );
+                              await setDoc(progressRef, {
+                                status: "in progress",
+                                timer: {
+                                  remainingTime: getCurrentTimeRemaining(),
+                                  isPaused: false,
+                                },
+                                started: true,
+                                updatedAt: new Date().toISOString(),
+                              }, { merge: true });
+                            }
+                          }
+                          handleStart();
+                        }}
                         className="w-full bg-gradient-to-r from-green-400 to-blue-500 text-white font-bold"
                       >
                         Start
                       </Button>
                     ) : (
-                      <Button
-                        onClick={handleReadyForValidation}
-                        disabled={isSubmitting || waitingForJudge}
-                        className="w-full bg-gradient-to-r from-cyan-500 via-blue-600 to-purple-600 text-white font-bold"
-                      >
-                        {isSubmitting ? "Submitting..." : "Answer is Ready"}
-                    </Button>
+                      <div className="flex gap-2">
+                        <Button
+                          onClick={handleReadyForValidation}
+                          disabled={isSubmitting || waitingForJudge}
+                          className="w-full bg-gradient-to-r from-cyan-500 via-blue-600 to-purple-600 text-white font-bold"
+                        >
+                          {isSubmitting ? "Submitting..." : "Answer is Ready"}
+                        </Button>
+                        {activeQuestionIndex < roundQuestions.length - 1 && (
+                          <Button
+                            onClick={handlePassSkip}
+                            disabled={waitingForJudge}
+                            className="w-full bg-gradient-to-r from-orange-400 to-yellow-500 text-white font-bold"
+                          >
+                            Pass / Skip
+                          </Button>
+                        )}
+                      </div>
                     )}
                   </div>
                 </CardContent>

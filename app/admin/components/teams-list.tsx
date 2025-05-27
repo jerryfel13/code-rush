@@ -19,7 +19,7 @@ import { Search, Plus, Edit, Trash2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { auth, db } from "@/lib/firebase"
 import { createUserWithEmailAndPassword } from "firebase/auth"
-import { doc, setDoc, collection, getDocs, updateDoc, onSnapshot } from "firebase/firestore"
+import { doc, setDoc, collection, getDocs, updateDoc, onSnapshot, deleteDoc } from "firebase/firestore"
 
 export function TeamsList() {
   const { toast } = useToast()
@@ -174,19 +174,31 @@ export function TeamsList() {
     }
   }
 
-  const handleDeleteTeam = () => {
+  const handleDeleteTeam = async () => {
     if (!selectedTeam) return
 
-    const updatedTeams = teams.filter((team) => team.id !== selectedTeam.id)
-    setTeams(updatedTeams)
-    setIsDeleteTeamOpen(false)
+    try {
+      // Delete from Firestore
+      await deleteDoc(doc(db, "users", selectedTeam.id));
 
-    toast({
-      title: "Team Deleted",
-      description: `Team "${selectedTeam.name}" has been deleted.`,
-    })
+      // Remove from local state
+      const updatedTeams = teams.filter((team) => team.id !== selectedTeam.id)
+      setTeams(updatedTeams)
+      setIsDeleteTeamOpen(false)
 
-    setSelectedTeam(null)
+      toast({
+        title: "Team Deleted",
+        description: `Team "${selectedTeam.name}" has been deleted.`,
+      })
+
+      setSelectedTeam(null)
+    } catch (error: any) {
+      toast({
+        title: "Failed to delete team",
+        description: error.message,
+        variant: "destructive",
+      })
+    }
   }
 
   return (

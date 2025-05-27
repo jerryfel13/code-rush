@@ -16,10 +16,7 @@ export async function POST(request: Request) {
     const { email, teamName } = await request.json();
 
     const mailOptions = {
-      from: {
-        name: "Code Rush No-reply",
-        address: "yourfel13@gmail.com"
-      },
+      from: `"Code Rush No-reply" <${process.env.GMAIL_USER ?? ''}>`,
       to: email,
       subject: "Code Rush Registration Activated",
       html: `
