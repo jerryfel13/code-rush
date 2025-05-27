@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { useParticipantAuth } from "../context/participant-auth-context"
 import { Button } from "@/components/ui/button"
@@ -45,7 +45,10 @@ export function ParticipantInterface() {
   const [progressMap, setProgressMap] = useState<{ [questionId: string]: any }>({});
   const [progressLoading, setProgressLoading] = useState(true);
   const [started, setStarted] = useState(false);
+  const [currentTimer, setCurrentTimer] = useState(0);
+  const currentTimerRef = useRef(currentTimer);
   const [skippedQuestions, setSkippedQuestions] = useState<{ [key: string]: boolean }>({});
+  const [timeUpShown, setTimeUpShown] = useState(false);
 
   useEffect(() => {
     const fetchQuestions = async () => {
@@ -79,22 +82,16 @@ export function ParticipantInterface() {
   // Check if a round is locked
   const isRoundLocked = (round: string) => {
     if (round === "easy") {
-      // Lock easy round if all easy questions are completed
-      return Object.keys(completedQuestions.easy).length === easyQuestions.length && easyQuestions.length > 0;
+      // Easy round is never locked
+      return false;
     }
     if (round === "medium") {
-      // Unlock medium if all easy are done, lock if all medium are done
-      if (Object.keys(completedQuestions.easy).length === easyQuestions.length && easyQuestions.length > 0) {
-        return Object.keys(completedQuestions.medium).length === mediumQuestions.length && mediumQuestions.length > 0;
-      }
-      return true;
+      // Medium is locked unless ALL easy questions are correct
+      return !easyQuestions.every(q => progressMap[q.id]?.status === "correct");
     }
     if (round === "hard") {
-      // Unlock hard if all medium are done, lock if all hard are done
-      if (Object.keys(completedQuestions.medium).length === mediumQuestions.length && mediumQuestions.length > 0) {
-        return Object.keys(completedQuestions.hard).length === hardQuestions.length && hardQuestions.length > 0;
-      }
-      return true;
+      // Hard is locked unless ALL medium questions are correct
+      return !mediumQuestions.every(q => progressMap[q.id]?.status === "correct");
     }
     return true;
   }
@@ -105,7 +102,7 @@ export function ParticipantInterface() {
     if (index < activeQuestionIndex) {
       const questionId = roundQuestions[index].id;
       const progress = progressMap[questionId];
-      return progress?.status === "correct" || (progress?.timer && progress.timer.remainingTime <= 0);
+      return progress?.status === "correct" || progress?.status === "skipped" || (progress?.timer && progress.timer.remainingTime <= 0);
     }
     // Unlock the next question if the previous is correct
     if (index === activeQuestionIndex + 1) {
@@ -223,24 +220,27 @@ export function ParticipantInterface() {
   }
 
   const handleTimeUp = () => {
-    toast({
-      title: "Time's Up!",
-      description: "The time for this question has expired.",
-      variant: "destructive",
-    });
-    // Save timer state when time is up
-    saveTimerState(0, true);
-    setIsTimerPaused(true); // Pause timer when time is up
-    // Save 0 points for this question
-    if (participant && currentQuestion) {
-      const progressRef = doc(
-        collection(db, "participant_progress"),
-        `${participant.id}_${currentQuestion.id}`
-      );
-      setDoc(progressRef, {
-        points: 0,
-        updatedAt: new Date().toISOString(),
-      }, { merge: true });
+    if (!timeUpShown) {
+      toast({
+        title: "Time's Up!",
+        description: "The time for this question has expired.",
+        variant: "destructive",
+      });
+      setTimeUpShown(true);
+      // Save timer state when time is up
+      saveTimerState(0, true);
+      setIsTimerPaused(true); // Pause timer when time is up
+      // Save 0 points for this question
+      if (participant && currentQuestion) {
+        const progressRef = doc(
+          collection(db, "participant_progress"),
+          `${participant.id}_${currentQuestion.id}`
+        );
+        setDoc(progressRef, {
+          points: 0,
+          updatedAt: new Date().toISOString(),
+        }, { merge: true });
+      }
     }
   }
 
@@ -271,16 +271,45 @@ export function ParticipantInterface() {
       toast({
         title: "Round Locked",
         description: "Complete the previous round to unlock this one.",
-        variant: "destructive",
-      })
+      variant: "destructive",
+    })
     }
   }
 
-  const handleQuestionChange = (index: number) => {
+  const handleQuestionChange = async (index: number) => {
     if (!isQuestionLocked(activeRound, index)) {
+      // Save timer for the current question
+      await saveTimerState(getCurrentTimeRemaining(), true);
+
+      // Switch to the new question
       setActiveQuestionIndex(index);
       setAnswer("");
-      saveTimerState(getCurrentTimeRemaining(), true);
+
+      // Load timer for the new question
+      if (participant && roundQuestions[index]) {
+        const progressRef = doc(
+          collection(db, "participant_progress"),
+          `${participant.id}_${roundQuestions[index].id}`
+        );
+        const progressSnap = await getDoc(progressRef);
+        let defaultTime = 15 * 60;
+        if (activeRound === "medium") defaultTime = 20 * 60;
+        if (activeRound === "hard") defaultTime = (index < 2 ? 25 * 60 : 30 * 60);
+
+        if (progressSnap.exists()) {
+          const data = progressSnap.data();
+          if (data.timer && typeof data.timer.remainingTime === "number") {
+            setCurrentTimeRemaining(data.timer.remainingTime);
+            setCurrentTimer(data.timer.remainingTime);
+          } else {
+            setCurrentTimeRemaining(defaultTime);
+            setCurrentTimer(defaultTime);
+          }
+      } else {
+          setCurrentTimeRemaining(defaultTime);
+          setCurrentTimer(defaultTime);
+        }
+      }
     } else {
       toast({
         title: "Question Locked",
@@ -391,6 +420,10 @@ export function ParticipantInterface() {
                 `${participant.id}_${currentQuestion.id}`
               );
               await setDoc(progressRef, {
+                timer: {
+                  remainingTime: getCurrentTimeRemaining(),
+                  isPaused: false,
+                },
                 points: getPointsForCurrentQuestion(),
                 updatedAt: new Date().toISOString(),
               }, { merge: true });
@@ -429,7 +462,7 @@ export function ParticipantInterface() {
       round: activeRound,
       order: currentQuestion.order,
       timer: {
-        remainingTime: getCurrentTimeRemaining(),
+        remainingTime: remaining,
         isPaused: paused,
       },
       updatedAt: new Date().toISOString(),
@@ -440,6 +473,7 @@ export function ParticipantInterface() {
   const handleEasyTick = (remaining: number) => {
     setCurrentTimeRemaining(remaining);
     console.log("Timer tick, remaining:", remaining);
+    setCurrentTimer(remaining);
   };
 
   // Pause timer on unload and save remaining time
@@ -466,28 +500,48 @@ export function ParticipantInterface() {
         `${participant.id}_${currentQuestion.id}`
       );
       const progressSnap = await getDoc(progressRef);
-      let timerValue = 15 * 60;
-      let statusValue = "not started";
-      let startedValue = false;
+      let defaultTime = 15 * 60;
+      if (activeRound === "medium") defaultTime = 20 * 60;
+      if (activeRound === "hard") defaultTime = (activeQuestionIndex < 2 ? 25 * 60 : 30 * 60);
       if (progressSnap.exists()) {
         const data = progressSnap.data();
         if (data.timer && typeof data.timer.remainingTime === "number") {
           setCurrentTimeRemaining(data.timer.remainingTime);
+          setCurrentTimer(data.timer.remainingTime);
+        } else {
+          setCurrentTimeRemaining(defaultTime);
+          setCurrentTimer(defaultTime);
         }
-        statusValue = data.status;
-        startedValue = data.started ?? false;
-        setStarted(startedValue);
-        setIsTimerPaused(!startedValue);
+        let statusValue = "not started";
+        if (data.status === "correct") {
+          statusValue = "correct";
+        } else if (data.status === "wrong") {
+          statusValue = "wrong";
+        } else if (data.status === "pending") {
+          statusValue = "pending";
+        }
+        setStarted(data.started ?? false);
+        setIsTimerPaused(!data.started);
+        setProgressMap(prev => ({
+          ...prev,
+          [currentQuestion.id]: {
+            ...(prev[currentQuestion.id] || {}),
+            status: statusValue,
+          },
+        }));
+        setCompletedQuestions(prev => ({
+          ...prev,
+          [activeRound]: {
+            ...prev[activeRound],
+            [activeQuestionIndex]: statusValue === "correct"
+          }
+        }));
       } else {
-        if (activeRound === "easy") setEasyTimeRemaining(15 * 60);
-        if (activeRound === "medium") setMediumTimeRemaining(20 * 60);
-        if (activeRound === "hard") {
-          if (activeQuestionIndex < 2) setHardTimeRemaining(25 * 60);
-          else setHardTimeRemaining(30 * 60);
-        }
+        setCurrentTimeRemaining(defaultTime);
+        setCurrentTimer(defaultTime);
         setStarted(false);
         setIsTimerPaused(true);
-      }
+        let statusValue = "not started";
       setProgressMap(prev => ({
         ...prev,
         [currentQuestion.id]: {
@@ -495,9 +549,17 @@ export function ParticipantInterface() {
           status: statusValue,
         },
       }));
+        setCompletedQuestions(prev => ({
+          ...prev,
+          [activeRound]: {
+            ...prev[activeRound],
+            [activeQuestionIndex]: false
+          }
+        }));
+      }
       setProgressLoading(false);
     };
-    loadProgressAndTimer();
+      loadProgressAndTimer();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [participant, currentQuestion, activeRound, activeQuestionIndex]);
 
@@ -548,9 +610,9 @@ export function ParticipantInterface() {
   const hardCorrect = Object.keys(completedQuestions.hard).length;
 
   // Calculate points for each round
-  const easyPoints = Object.keys(completedQuestions.easy).length * 2;
-  const mediumPoints = Object.keys(completedQuestions.medium).length * 4;
-  const hardPoints = Object.keys(completedQuestions.hard).length * 6;
+  const easyPoints = Object.values(progressMap).filter(p => p.round === "easy" && p.status === "correct").length * 2;
+  const mediumPoints = Object.values(progressMap).filter(p => p.round === "medium" && p.status === "correct").length * 4;
+  const hardPoints = Object.values(progressMap).filter(p => p.round === "hard" && p.status === "correct").length * 6;
   const totalPoints = easyPoints + mediumPoints + hardPoints;
 
   // Add handler for pass/skip
@@ -636,6 +698,26 @@ export function ParticipantInterface() {
     }, { merge: true });
   };
 
+  // Auto-save timer state every 5 seconds while timer is running
+  useEffect(() => {
+    console.log("Auto-save effect: started", started, "isTimerPaused", isTimerPaused, "currentQuestion", currentQuestion?.id);
+    if (!started || isTimerPaused) return;
+    const interval = setInterval(() => {
+      console.log("Auto-saving timer state");
+      console.log("getCurrentTimeRemaining", currentTimerRef.current);
+      saveTimerState(currentTimerRef.current, false);
+    }, 15000); // every 5 seconds
+    return () => clearInterval(interval);
+  }, [started, isTimerPaused, currentQuestion?.id]);
+
+  useEffect(() => {
+    currentTimerRef.current = currentTimer;
+  }, [currentTimer]);
+
+  useEffect(() => {
+    setTimeUpShown(false);
+  }, [currentQuestion?.id]);
+
   if (loadingQuestions) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -675,6 +757,7 @@ export function ParticipantInterface() {
                   onTimeUp={handleTimeUp}
                   onTick={val => {
                     setCurrentTimeRemaining(val);
+                    setCurrentTimer(val);
                     console.log("Timer tick, remaining:", val);
                   }}
                 />
@@ -839,13 +922,13 @@ export function ParticipantInterface() {
                       </div>
                     ) : (
                       <div className="flex gap-2">
-                        <Button
-                          onClick={handleReadyForValidation}
+                      <Button
+                        onClick={handleReadyForValidation}
                           disabled={isSubmitting || waitingForJudge || getCurrentTimeRemaining() <= 0}
-                          className="w-full bg-gradient-to-r from-cyan-500 via-blue-600 to-purple-600 text-white font-bold"
-                        >
-                          {isSubmitting ? "Submitting..." : "Answer is Ready"}
-                        </Button>
+                        className="w-full bg-gradient-to-r from-cyan-500 via-blue-600 to-purple-600 text-white font-bold"
+                      >
+                        {isSubmitting ? "Submitting..." : "Answer is Ready"}
+                    </Button>
                         {activeQuestionIndex < roundQuestions.length - 1 && (
                           <Button
                             onClick={handlePassSkip}

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { collection, onSnapshot, query, orderBy } from "firebase/firestore"
+import { collection, onSnapshot, query, orderBy, getDocs } from "firebase/firestore"
 import { db } from "@/lib/firebase"
 import { motion, AnimatePresence } from "framer-motion"
 import { Maximize2, Minimize2, Trophy, Target, CheckCircle2, AlertCircle, ArrowLeft } from "lucide-react"
@@ -33,6 +33,8 @@ export default function LiveContestPage() {
   const [showAchievements, setShowAchievements] = useState(true)
   const [progress, setProgress] = useState<any[]>([])
   const [mounted, setMounted] = useState(false)
+  const [usersMap, setUsersMap] = useState<{ [id: string]: any }>({});
+  const [questions, setQuestions] = useState<any[]>([]);
 
   useEffect(() => {
     setMounted(true)
@@ -46,6 +48,26 @@ export default function LiveContestPage() {
     const unsubscribeProgress = onSnapshot(collection(db, "participant_progress"), (snapshot) => {
       setProgress(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     });
+
+    const fetchUsers = async () => {
+      const snapshot = await getDocs(collection(db, "users"));
+      const map: { [id: string]: any } = {};
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        if (data.role === "participant") {
+          map[data.id] = data;
+        }
+      });
+      setUsersMap(map);
+    };
+    fetchUsers();
+
+    // Fetch all questions
+    const fetchQuestions = async () => {
+      const snapshot = await getDocs(collection(db, "questions"));
+      setQuestions(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    };
+    fetchQuestions();
 
     return () => {
       clearInterval(timer)
@@ -105,11 +127,14 @@ export default function LiveContestPage() {
     }
   });
   const problems = Object.values(problemMap);
+  const allQuestionIds = questions.map(q => q.id);
+  const startedQuestionIds = new Set(progress.map(p => p.questionId));
+  const notStarted = allQuestionIds.filter(qid => !startedQuestionIds.has(qid)).length;
   const stats = {
     total: problems.length,
     solved: problems.filter(p => p.status === "solved").length,
-    attempted: problems.filter(p => p.status === "attempted").length,
-    notStarted: problems.filter(p => p.status === "not_started").length,
+    attempted: progress.filter(p => p.status !== "correct").length,
+    notStarted: notStarted,
   };
 
   const toggleFullScreen = () => {
@@ -126,7 +151,7 @@ export default function LiveContestPage() {
     const achievements: { team: string; achievement: any }[] = []
     teams.forEach(team => {
       if (team.achievements) {
-        team.achievements.forEach(achievement => {
+        team.achievements.forEach((achievement: any) => {
           achievements.push({ team: team.name, achievement })
         })
       }
@@ -135,6 +160,13 @@ export default function LiveContestPage() {
   }
 
   const recentAchievements = getRecentAchievements()
+
+  // Build list of all active teams/users
+  const activeTeams = Object.values(usersMap).filter(
+    (user: any) => user.role === "participant" && user.status === "active"
+  );
+  const getTeamPoints = (teamName: string) =>
+    teams.find((t: any) => t.teamName === teamName)?.points || 0;
 
   return (
     <div className={`min-h-screen bg-[#181c24] p-8 transition-all duration-300 ${isFullScreen ? 'p-0' : ''}`}>
@@ -192,7 +224,7 @@ export default function LiveContestPage() {
 
         {/* After the header, use a flex layout for main content and sidebar */}
         <div className="flex flex-col md:flex-row gap-6">
-          {/* Main Content: Leaderboard and Teams Table */}
+          {/* Main Content: Leaderboard only */}
           <div className="flex-1">
             {/* 1. Live Leaderboard */}
             <Card className="bg-black/40 border-cyan-500/50 shadow-[0_0_15px_rgba(0,255,247,0.1)] mb-8">
@@ -200,99 +232,90 @@ export default function LiveContestPage() {
                 <CardTitle className="text-4xl text-cyan-400 text-center text-shadow-cyber font-extrabold tracking-wide mb-4">
                   Live Leaderboard
                 </CardTitle>
+                {/* Problem Completion Statistics as text row */}
+                <div className="flex justify-center gap-8 mt-6 text-center">
+                  <div>
+                    <div className="text-2xl font-bold text-cyan-400">{stats.solved}</div>
+                    <div className="text-sm text-cyan-200">Solved</div>
+                  </div>
+                  <div>
+                    <div className="text-2xl font-bold text-purple-400">{stats.attempted}</div>
+                    <div className="text-sm text-purple-200">Attempted</div>
+                  </div>
+                  <div>
+                    <div className="text-2xl font-bold text-cyan-400">{stats.notStarted}</div>
+                    <div className="text-sm text-cyan-200">Not Started</div>
+                  </div>
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
                   <AnimatePresence>
-                    {teams.map((team, index) => (
-                      <motion.div
-                        key={team.teamName}
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -20 }}
-                        transition={{ duration: 0.3 }}
-                        className="flex items-center justify-between p-4 rounded-lg bg-black/30 border border-cyan-500/30 shadow-[0_0_10px_rgba(0,255,247,0.1)] hover:shadow-[0_0_15px_rgba(0,255,247,0.2)] transition-all"
-                      >
-                        <div className="flex items-center gap-4">
-                          <div className="text-2xl font-bold text-cyan-400 w-8 text-shadow-cyber">
-                            #{index + 1}
+                    {teams.map((team, index) => {
+                      // Badge color for top 3
+                      const badgeColors = [
+                        "bg-gradient-to-r from-yellow-400 to-yellow-200 text-yellow-900 border-yellow-300",
+                        "bg-gradient-to-r from-gray-400 to-gray-200 text-gray-900 border-gray-300",
+                        "bg-gradient-to-r from-orange-400 to-orange-200 text-orange-900 border-orange-300"
+                      ];
+                      const badgeClass = badgeColors[index] || "bg-cyan-800 text-cyan-100 border-cyan-400";
+                      const isTop = index === 0;
+                      return (
+                        <motion.div
+                          key={team.teamName}
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -20 }}
+                          transition={{ duration: 0.3 }}
+                          className={`flex items-center justify-between p-4 rounded-xl border shadow-lg transition-all
+                            ${isTop ? "border-yellow-400 bg-gradient-to-r from-yellow-100/30 to-cyan-100/10 shadow-yellow-200/40" : "bg-black/30 border-cyan-500/30"}
+                            hover:shadow-[0_0_15px_rgba(0,255,247,0.2)]`}
+                        >
+                          <div className="flex items-center gap-4">
+                            {/* Rank Badge */}
+                            <div className={`w-10 h-10 flex items-center justify-center rounded-full border-2 font-bold text-lg shadow ${badgeClass}`}>
+                              {index + 1}
+                            </div>
+                            {/* Team Avatar/Initial */}
+                            <div className="w-10 h-10 flex items-center justify-center rounded-full bg-cyan-700 text-cyan-100 font-bold text-xl shadow-inner mr-2">
+                              {team.teamName?.[0]?.toUpperCase() || "?"}
+                            </div>
+                            <div>
+                              <h3 className={`text-lg font-semibold text-shadow-cyber ${isTop ? "text-yellow-500" : "text-cyan-300"}`}>
+                                {team.teamName}
+                              </h3>
+                              <div className="flex items-center gap-2 text-cyan-400 font-bold">
+                                <svg className="w-5 h-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2l2.39 4.84 5.34.78-3.87 3.77.91 5.32L10 13.77l-4.77 2.51.91-5.32-3.87-3.77 5.34-.78L10 2z"/></svg>
+                                <span className="text-green-400">{team.points}</span>
+                                <span className="text-xs text-cyan-200 ml-2">pts</span>
+                                {/* Member list */}
+                                <ul className="ml-4 text-xs text-purple-200">
+                                  {(usersMap[team.teamName]?.members || []).map((member: any, idx: number) => (
+                                    <li key={idx} className="whitespace-nowrap">
+                                      {member.name}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            </div>
                           </div>
-                          <div>
-                            <h3 className="text-lg font-semibold text-cyan-300 text-shadow-cyber">
-                              {team.teamName}
-                            </h3>
-                            <div className="text-cyan-400 font-bold">Team Points: <span className="text-green-400">{team.points}</span></div>
-                           
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-4">
-                          <div className="text-2xl font-bold text-cyan-400 text-shadow-cyber">
-                            {team.points}
-                          </div>
-                        </div>
-                      </motion.div>
-                    ))}
+                        </motion.div>
+                      );
+                    })}
                   </AnimatePresence>
                 </div>
-              </CardContent>
-            </Card>
-            {/* 2. All Participating Teams & Progress */}
-            <div className="mt-12 mb-4 text-center">
-              <h2 className="text-4xl font-extrabold text-cyan-400 text-shadow-cyber tracking-wide drop-shadow-[0_0_10px_rgba(0,255,247,0.5)]">
-                All Participating Teams & Progress
-              </h2>
-            </div>
-            <div className="overflow-x-auto mt-4">
-              <table className="min-w-full bg-black/30 border border-cyan-500/30 rounded-lg">
-                <thead>
-                  <tr>
-                    <th className="px-4 py-2 text-cyan-300">#</th>
-                    <th className="px-4 py-2 text-cyan-300">Team</th>
-                    <th className="px-4 py-2 text-cyan-300">Total Points</th>
-                    <th className="px-4 py-2 text-cyan-300">Participants</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {teams.map((team, idx) => (
-                    <tr key={team.teamName} className="border-t border-cyan-700/30">
-                      <td className="px-4 py-2 text-center text-cyan-200 align-top">{idx + 1}</td>
-                      <td className="px-4 py-2 text-cyan-200 font-bold align-top">{team.teamName}</td>
-                      <td className="px-4 py-2 text-green-400 font-semibold align-top">{team.points}</td>
-                      <td className="px-4 py-2 align-top">
-                        <ul className="space-y-1">
-                          {team.members.map((member: any) => (
-                            <li key={member.participantId} className="text-purple-200 flex justify-between">
-                              <span className="text-cyan-100 ml-2">{member.points} pts</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-          {/* Sidebar: Problem Completion Statistics (hidden on small screens) */}
-          <div className="hidden md:block w-full md:w-1/4">
-            <Card className="bg-black/40 border-cyan-500/50 shadow-[0_0_15px_rgba(0,255,247,0.1)] mb-8">
-              <CardHeader>
-                <CardTitle className="text-2xl text-cyan-400 text-center text-shadow-cyber">
-                  Problem Completion Statistics
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 gap-4">
-                  <div className="text-center p-4 rounded-lg bg-black/30 border border-cyan-500/30 shadow-[0_0_10px_rgba(0,255,247,0.1)]">
-                    <div className="text-3xl font-bold text-cyan-400 text-shadow-cyber">{stats.solved}</div>
+                {/* Problem Completion Statistics as text row */}
+                <div className="flex justify-center gap-8 mt-6 text-center">
+                  <div>
+                    <div className="text-2xl font-bold text-cyan-400">{stats.solved}</div>
                     <div className="text-sm text-cyan-200">Solved</div>
                   </div>
-                  <div className="text-center p-4 rounded-lg bg-black/30 border border-purple-500/30 shadow-[0_0_10px_rgba(168,85,247,0.1)]">
-                    <div className="text-3xl font-bold text-purple-400 text-shadow-cyber">{stats.attempted}</div>
+                  <div>
+                    <div className="text-2xl font-bold text-purple-400">{stats.attempted}</div>
                     <div className="text-sm text-purple-200">Attempted</div>
                   </div>
-                  <div className="text-center p-4 rounded-lg bg-black/30 border border-cyan-500/30 shadow-[0_0_10px_rgba(0,255,247,0.1)]">
-                    <div className="text-3xl font-bold text-cyan-400 text-shadow-cyber">{stats.notStarted}</div>
+                  <div>
+                    <div className="text-2xl font-bold text-cyan-400">{stats.notStarted}</div>
                     <div className="text-sm text-cyan-200">Not Started</div>
                   </div>
                 </div>
