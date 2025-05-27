@@ -58,31 +58,33 @@ export default function LiveContestPage() {
   const participantMap: Record<string, any> = {};
   progress.forEach(p => {
     if (!participantMap[p.participantId]) {
+      console.log("participantMap entry", p);
       participantMap[p.participantId] = {
         participantId: p.participantId,
-        name: p.participantName || p.name || "Unknown",
-        teamId: p.teamId,
-        teamName: p.teamName,
+        name: p.participantName || p.name || p.participantId || "Unknown",
+        teamName: p.teamName || "Unknown",
         points: 0,
       };
     }
     participantMap[p.participantId].points += p.points || 0;
   });
+  console.log("participantMap result", participantMap);
   const participants = Object.values(participantMap);
   const teamMap: Record<string, any> = {};
   participants.forEach(p => {
-    if (!teamMap[p.teamId]) {
-      teamMap[p.teamId] = {
-        teamId: p.teamId,
+    if (!teamMap[p.teamName]) {
+      teamMap[p.teamName] = {
         teamName: p.teamName,
         members: [],
         points: 0,
       };
     }
-    teamMap[p.teamId].members.push(p);
-    teamMap[p.teamId].points += p.points;
+    teamMap[p.teamName].members.push(p);
+    teamMap[p.teamName].points += p.points;
   });
+  console.log("teamMap result", teamMap);
   const teams = Object.values(teamMap).sort((a, b) => b.points - a.points);
+  console.log("teams array", teams);
 
   // Aggregate problem completion statistics from participant_progress
   const problemMap: Record<string, { title: string, status: "solved" | "attempted" | "not_started" }> = {};
@@ -204,7 +206,7 @@ export default function LiveContestPage() {
                   <AnimatePresence>
                     {teams.map((team, index) => (
                       <motion.div
-                        key={team.teamId}
+                        key={team.teamName}
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -20 }}
@@ -220,13 +222,7 @@ export default function LiveContestPage() {
                               {team.teamName}
                             </h3>
                             <div className="text-cyan-400 font-bold">Team Points: <span className="text-green-400">{team.points}</span></div>
-                            <ul className="text-sm text-purple-200/80 mt-1">
-                              {team.members.map((member: any) => (
-                                <li key={member.participantId} className="text-purple-200">
-                                  {member.name}: <span className="text-cyan-100">{member.points} pts</span>
-                                </li>
-                              ))}
-                            </ul>
+                           
                           </div>
                         </div>
                         <div className="flex items-center gap-4">
@@ -258,15 +254,15 @@ export default function LiveContestPage() {
                 </thead>
                 <tbody>
                   {teams.map((team, idx) => (
-                    <tr key={team.teamId} className="border-t border-cyan-700/30">
-                      <td className="px-4 py-2 text-center text-cyan-200">{idx + 1}</td>
-                      <td className="px-4 py-2 text-cyan-200 font-bold">{team.teamName}</td>
-                      <td className="px-4 py-2 text-green-400 font-semibold">{team.points}</td>
-                      <td className="px-4 py-2">
-                        <ul>
+                    <tr key={team.teamName} className="border-t border-cyan-700/30">
+                      <td className="px-4 py-2 text-center text-cyan-200 align-top">{idx + 1}</td>
+                      <td className="px-4 py-2 text-cyan-200 font-bold align-top">{team.teamName}</td>
+                      <td className="px-4 py-2 text-green-400 font-semibold align-top">{team.points}</td>
+                      <td className="px-4 py-2 align-top">
+                        <ul className="space-y-1">
                           {team.members.map((member: any) => (
-                            <li key={member.participantId} className="text-purple-200">
-                              {member.name}: <span className="text-cyan-100">{member.points} pts</span>
+                            <li key={member.participantId} className="text-purple-200 flex justify-between">
+                              <span className="text-cyan-100 ml-2">{member.points} pts</span>
                             </li>
                           ))}
                         </ul>

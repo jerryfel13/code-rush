@@ -280,6 +280,7 @@ export function ParticipantInterface() {
     if (!isQuestionLocked(activeRound, index)) {
       setActiveQuestionIndex(index);
       setAnswer("");
+      saveTimerState(getCurrentTimeRemaining(), true);
     } else {
       toast({
         title: "Question Locked",
@@ -422,17 +423,23 @@ export function ParticipantInterface() {
       `${participant.id}_${currentQuestion.id}`
     );
     await setDoc(progressRef, {
+      participantId: participant.id,
+      teamName: participant.teamName,
+      questionId: currentQuestion.id,
+      round: activeRound,
+      order: currentQuestion.order,
       timer: {
-        remainingTime: remaining,
+        remainingTime: getCurrentTimeRemaining(),
         isPaused: paused,
-      }
+      },
+      updatedAt: new Date().toISOString(),
     }, { merge: true });
   };
 
   // Timer tick handler for easy round
   const handleEasyTick = (remaining: number) => {
     setCurrentTimeRemaining(remaining);
-    // No saveTimerState here to avoid excessive writes
+    console.log("Timer tick, remaining:", remaining);
   };
 
   // Pause timer on unload and save remaining time
@@ -460,8 +467,6 @@ export function ParticipantInterface() {
       );
       const progressSnap = await getDoc(progressRef);
       let timerValue = 15 * 60;
-      let pausedValue = true;
-      let waitingValue = false;
       let statusValue = "not started";
       let startedValue = false;
       if (progressSnap.exists()) {
@@ -471,16 +476,8 @@ export function ParticipantInterface() {
         }
         statusValue = data.status;
         startedValue = data.started ?? false;
-        if (data.status === "skipped" || data.status === "not started") {
-          setStarted(false);
-          setIsTimerPaused(true);
-        } else if (data.status === "correct" || data.status === "pending") {
-          setStarted(false);
-          setIsTimerPaused(true);
-        } else {
-          setStarted(true);
-          setIsTimerPaused(false);
-        }
+        setStarted(startedValue);
+        setIsTimerPaused(!startedValue);
       } else {
         if (activeRound === "easy") setEasyTimeRemaining(15 * 60);
         if (activeRound === "medium") setMediumTimeRemaining(20 * 60);
@@ -491,7 +488,6 @@ export function ParticipantInterface() {
         setStarted(false);
         setIsTimerPaused(true);
       }
-      setWaitingForJudge(waitingValue);
       setProgressMap(prev => ({
         ...prev,
         [currentQuestion.id]: {
@@ -501,9 +497,7 @@ export function ParticipantInterface() {
       }));
       setProgressLoading(false);
     };
-    if (activeRound === "easy") {
-      loadProgressAndTimer();
-    }
+    loadProgressAndTimer();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [participant, currentQuestion, activeRound, activeQuestionIndex]);
 
@@ -679,7 +673,10 @@ export function ParticipantInterface() {
                   time={getCurrentTimeRemaining()}
                   isPaused={!started || isTimerPaused}
                   onTimeUp={handleTimeUp}
-                  onTick={val => setCurrentTimeRemaining(val)}
+                  onTick={val => {
+                    setCurrentTimeRemaining(val);
+                    console.log("Timer tick, remaining:", val);
+                  }}
                 />
               )}
             </div>
@@ -805,18 +802,46 @@ export function ParticipantInterface() {
                                 updatedAt: new Date().toISOString(),
                               }, { merge: true });
                             }
+                          } else {
+                            // Mark as started in Firestore
+                            if (participant && currentQuestion) {
+                              const progressRef = doc(
+                                collection(db, "participant_progress"),
+                                `${participant.id}_${currentQuestion.id}`
+                              );
+                              await setDoc(progressRef, {
+                                started: true,
+                                participantId: participant.id,
+                                teamName: participant.teamName,
+                                questionId: currentQuestion.id,
+                                answer: "", // No answer input
+                                status: "skipped",
+                                round: activeRound,
+                                timer: {
+                                  remainingTime: getCurrentTimeRemaining(),
+                                  isPaused: false,
+                                },
+                                order: currentQuestion.order,
+                                updatedAt: new Date().toISOString(),
+                              }, { merge: true });
+                            }
                           }
                           handleStart();
                         }}
                         className="w-full bg-gradient-to-r from-green-400 to-blue-500 text-white font-bold"
+                        disabled={getCurrentTimeRemaining() <= 0}
                       >
                         Start
                       </Button>
+                    ) : getCurrentTimeRemaining() <= 0 ? (
+                      <div className="w-full text-center text-red-400 font-bold py-2">
+                        Time is up! You can no longer submit an answer for this question.
+                      </div>
                     ) : (
                       <div className="flex gap-2">
                         <Button
                           onClick={handleReadyForValidation}
-                          disabled={isSubmitting || waitingForJudge}
+                          disabled={isSubmitting || waitingForJudge || getCurrentTimeRemaining() <= 0}
                           className="w-full bg-gradient-to-r from-cyan-500 via-blue-600 to-purple-600 text-white font-bold"
                         >
                           {isSubmitting ? "Submitting..." : "Answer is Ready"}
@@ -824,7 +849,7 @@ export function ParticipantInterface() {
                         {activeQuestionIndex < roundQuestions.length - 1 && (
                           <Button
                             onClick={handlePassSkip}
-                            disabled={waitingForJudge}
+                            disabled={waitingForJudge || getCurrentTimeRemaining() <= 0}
                             className="w-full bg-gradient-to-r from-orange-400 to-yellow-500 text-white font-bold"
                           >
                             Pass / Skip
