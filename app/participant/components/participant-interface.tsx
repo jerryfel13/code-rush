@@ -49,6 +49,7 @@ export function ParticipantInterface() {
   const currentTimerRef = useRef(currentTimer);
   const [skippedQuestions, setSkippedQuestions] = useState<{ [key: string]: boolean }>({});
   const [timeUpShown, setTimeUpShown] = useState(false);
+  const hasAutoAdvanced = useRef(false);
 
   useEffect(() => {
     const fetchQuestions = async () => {
@@ -181,23 +182,16 @@ export function ParticipantInterface() {
 
   // After loading progress and questions, auto-select the round based on progress
   useEffect(() => {
-    // Only run if questions and progress are loaded
     if (!participant || !questions.length) return;
 
-    // Calculate completed questions for each round
     const easyQuestions = questions.filter(q => q.difficulty === "easy");
     const mediumQuestions = questions.filter(q => q.difficulty === "medium");
     const hardQuestions = questions.filter(q => q.difficulty === "hard");
 
-    // Use completedQuestions state if available, otherwise fallback to progressMap
-    let easyDone = 0, mediumDone = 0, hardDone = 0;
-    if (completedQuestions && completedQuestions.easy) {
-      easyDone = Object.keys(completedQuestions.easy).length;
-      mediumDone = Object.keys(completedQuestions.medium).length;
-      hardDone = Object.keys(completedQuestions.hard).length;
-    }
+    const easyDone = Object.keys(completedQuestions.easy || {}).length;
+    const mediumDone = Object.keys(completedQuestions.medium || {}).length;
+    const hardDone = Object.keys(completedQuestions.hard || {}).length;
 
-    // Helper to find first incomplete question index in a round
     const findFirstIncompleteIndex = (questionsArr: any[], completedMap: Record<number, boolean>) => {
       for (let i = 0; i < questionsArr.length; i++) {
         if (!completedMap[i]) return i;
@@ -205,23 +199,46 @@ export function ParticipantInterface() {
       return 0;
     };
 
-    if (easyQuestions.length > 0 && easyDone === easyQuestions.length) {
-      // All easy done, check medium
-      if (mediumQuestions.length > 0 && mediumDone === mediumQuestions.length) {
-        // All medium done, go to hard
-        setActiveRound("hard");
-        setActiveQuestionIndex(findFirstIncompleteIndex(hardQuestions, completedQuestions.hard));
-      } else {
-        // Go to medium
-        setActiveRound("medium");
-        setActiveQuestionIndex(findFirstIncompleteIndex(mediumQuestions, completedQuestions.medium));
+    // Determine the first incomplete round and question
+    let targetRound = "easy";
+    let targetQuestions = easyQuestions;
+    let targetCompleted = completedQuestions.easy || {};
+    let targetIndex = findFirstIncompleteIndex(easyQuestions, completedQuestions.easy || {});
+    if (easyDone === easyQuestions.length && mediumQuestions.length > 0) {
+      targetRound = "medium";
+      targetQuestions = mediumQuestions;
+      targetCompleted = completedQuestions.medium || {};
+      targetIndex = findFirstIncompleteIndex(mediumQuestions, completedQuestions.medium || {});
+      if (mediumDone === mediumQuestions.length && hardQuestions.length > 0) {
+        targetRound = "hard";
+        targetQuestions = hardQuestions;
+        targetCompleted = completedQuestions.hard || {};
+        targetIndex = findFirstIncompleteIndex(hardQuestions, completedQuestions.hard || {});
       }
-    } else {
-      // Default to easy
-      setActiveRound("easy");
-      setActiveQuestionIndex(findFirstIncompleteIndex(easyQuestions, completedQuestions.easy));
     }
-  }, [participant, questions, completedQuestions]);
+
+    // Get the current question's status
+    const currentQuestions =
+      activeRound === "easy" ? easyQuestions :
+      activeRound === "medium" ? mediumQuestions :
+      hardQuestions;
+    const currentCompleted =
+      activeRound === "easy" ? completedQuestions.easy || {} :
+      activeRound === "medium" ? completedQuestions.medium || {} :
+      completedQuestions.hard || {};
+    const currentStatus = currentQuestions[activeQuestionIndex]
+      ? currentCompleted[activeQuestionIndex]
+      : undefined;
+
+    // Only redirect if the current question is completed (true) or does not exist (undefined)
+    if (
+      (activeRound !== targetRound || activeQuestionIndex !== targetIndex) &&
+      (currentStatus === true || typeof currentStatus === 'undefined')
+    ) {
+      setActiveRound(targetRound);
+      setActiveQuestionIndex(targetIndex);
+    }
+  }, [participant, questions, completedQuestions, activeRound, activeQuestionIndex]);
 
   // Helper to get points for a question based on round
   const getPointsForCurrentQuestion = () => {
@@ -770,6 +787,11 @@ export function ParticipantInterface() {
         }));
         if (data.status === "correct") {
           setWaitingForJudge(false);
+          // If points are not set or are 0, set them now
+          if (!data.points || data.points === 0) {
+            const points = getPointsForCurrentQuestion();
+            setDoc(progressRef, { points }, { merge: true });
+          }
         } else if (data.status === "pending") {
           setWaitingForJudge(true);
         }
@@ -777,6 +799,36 @@ export function ParticipantInterface() {
     });
     return () => unsubscribe();
   }, [participant, currentQuestion]);
+
+  // Helper to get the first incomplete round and question index
+  function getFirstIncompleteRoundAndIndex(questions: any[], completedQuestions: any) {
+    const easyQuestions = questions.filter(q => q.difficulty === "easy");
+    const mediumQuestions = questions.filter(q => q.difficulty === "medium");
+    const hardQuestions = questions.filter(q => q.difficulty === "hard");
+
+    const easyDone = Object.keys(completedQuestions.easy || {}).length;
+    const mediumDone = Object.keys(completedQuestions.medium || {}).length;
+    const hardDone = Object.keys(completedQuestions.hard || {}).length;
+
+    const findFirstIncompleteIndex = (questionsArr: any[], completedMap: Record<number, boolean>) => {
+      for (let i = 0; i < questionsArr.length; i++) {
+        if (!completedMap[i]) return i;
+      }
+      return 0;
+    };
+
+    let targetRound = "easy";
+    let targetIndex = findFirstIncompleteIndex(easyQuestions, completedQuestions.easy || {});
+    if (easyDone === easyQuestions.length && mediumQuestions.length > 0) {
+      targetRound = "medium";
+      targetIndex = findFirstIncompleteIndex(mediumQuestions, completedQuestions.medium || {});
+      if (mediumDone === mediumQuestions.length && hardQuestions.length > 0) {
+        targetRound = "hard";
+        targetIndex = findFirstIncompleteIndex(hardQuestions, completedQuestions.hard || {});
+      }
+    }
+    return { targetRound, targetIndex };
+  }
 
   if (loadingQuestions) {
     return (
@@ -875,7 +927,16 @@ export function ParticipantInterface() {
                   variant={index === activeQuestionIndex ? "default" : "outline"}
                   size="sm"
                     onClick={() => {
-                      if (index !== activeQuestionIndex) handleQuestionChange(index);
+                      const isCompleted = completedQuestions[activeRound]?.[index];
+                      // If the clicked question is not completed, allow navigation
+                      if (!isCompleted) {
+                        if (index !== activeQuestionIndex) handleQuestionChange(index);
+                        return;
+                      }
+                      // If the clicked question is completed (true) or does not exist (undefined), redirect
+                      const { targetRound, targetIndex } = getFirstIncompleteRoundAndIndex(questions, completedQuestions);
+                      setActiveRound(targetRound);
+                      setActiveQuestionIndex(targetIndex);
                     }}
                     className={`${
                       index === activeQuestionIndex 
