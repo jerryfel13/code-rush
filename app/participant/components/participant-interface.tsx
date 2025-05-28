@@ -456,6 +456,7 @@ export function ParticipantInterface() {
       collection(db, "participant_progress"),
       `${participant.id}_${currentQuestion.id}`
     );
+    console.log("remaining", remaining);
     await setDoc(progressRef, {
       participantId: participant.id,
       teamName: participant.teamName,
