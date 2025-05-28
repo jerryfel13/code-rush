@@ -179,6 +179,42 @@ export function ParticipantInterface() {
     fetchProgress();
   }, [participant, questions]);
 
+  // After loading progress and questions, auto-select the round based on progress
+  useEffect(() => {
+    // Only run if questions and progress are loaded
+    if (!participant || !questions.length) return;
+
+    // Calculate completed questions for each round
+    const easyQuestions = questions.filter(q => q.difficulty === "easy");
+    const mediumQuestions = questions.filter(q => q.difficulty === "medium");
+    const hardQuestions = questions.filter(q => q.difficulty === "hard");
+
+    // Use completedQuestions state if available, otherwise fallback to progressMap
+    let easyDone = 0, mediumDone = 0, hardDone = 0;
+    if (completedQuestions && completedQuestions.easy) {
+      easyDone = Object.keys(completedQuestions.easy).length;
+      mediumDone = Object.keys(completedQuestions.medium).length;
+      hardDone = Object.keys(completedQuestions.hard).length;
+    }
+
+    if (easyQuestions.length > 0 && easyDone === easyQuestions.length) {
+      // All easy done, check medium
+      if (mediumQuestions.length > 0 && mediumDone === mediumQuestions.length) {
+        // All medium done, go to hard
+        setActiveRound("hard");
+        setActiveQuestionIndex(0);
+      } else {
+        // Go to medium
+        setActiveRound("medium");
+        setActiveQuestionIndex(0);
+      }
+    } else {
+      // Default to easy
+      setActiveRound("easy");
+      setActiveQuestionIndex(0);
+    }
+  }, [participant, questions, completedQuestions]);
+
   // Helper to get points for a question based on round
   const getPointsForCurrentQuestion = () => {
     if (activeRound === "easy") return 2;
