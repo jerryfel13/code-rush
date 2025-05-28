@@ -11,7 +11,7 @@ import { Send, MessageSquare, Lock, CheckCircle2 } from "lucide-react"
 import { ParticipantHeader } from "./participant-header"
 import { Timer } from "./timer"
 import { ProtectedParticipantRoute } from "./protected-participant-route"
-import { collection, setDoc, doc, getDoc, query, where, getDocs } from "firebase/firestore";
+import { collection, setDoc, doc, getDoc, query, where, getDocs, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import axios from "axios";
 import { Input } from "@/components/ui/input";
@@ -198,7 +198,7 @@ export function ParticipantInterface() {
     }
 
     // Helper to find first incomplete question index in a round
-    const findFirstIncompleteIndex = (questionsArr, completedMap) => {
+    const findFirstIncompleteIndex = (questionsArr: any[], completedMap: Record<number, boolean>) => {
       for (let i = 0; i < questionsArr.length; i++) {
         if (!completedMap[i]) return i;
       }
@@ -749,6 +749,34 @@ export function ParticipantInterface() {
   useEffect(() => {
     setTimeUpShown(false);
   }, [currentQuestion?.id]);
+
+  // Real-time listener for current question's progress
+  useEffect(() => {
+    if (!participant || !currentQuestion) return;
+    const progressRef = doc(
+      collection(db, "participant_progress"),
+      `${participant.id}_${currentQuestion.id}`
+    );
+    const unsubscribe = onSnapshot(progressRef, (progressSnap) => {
+      if (progressSnap.exists()) {
+        const data = progressSnap.data();
+        setProgressMap(prev => ({
+          ...prev,
+          [currentQuestion.id]: {
+            ...(prev[currentQuestion.id] || {}),
+            ...data,
+            status: data.status,
+          },
+        }));
+        if (data.status === "correct") {
+          setWaitingForJudge(false);
+        } else if (data.status === "pending") {
+          setWaitingForJudge(true);
+        }
+      }
+    });
+    return () => unsubscribe();
+  }, [participant, currentQuestion]);
 
   if (loadingQuestions) {
     return (
