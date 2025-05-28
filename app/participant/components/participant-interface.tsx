@@ -197,21 +197,7 @@ export function ParticipantInterface() {
         status,
       },
     }));
-    // Save points for correct questions
-    if (status === "correct") {
-      if (participant && currentQuestion) {
-        const progressRef = doc(
-          collection(db, "participant_progress"),
-          `${participant.id}_${currentQuestion.id}`
-        );
-        setDoc(progressRef, {
-          points: getPointsForCurrentQuestion(),
-          updatedAt: new Date().toISOString(),
-        }, { merge: true });
-      }
-    } else {
-      savePointsToProgress();
-    }
+    // Only save points for correct questions in the polling effect after judge validation
   };
 
   const handleLogout = () => {

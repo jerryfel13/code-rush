@@ -256,7 +256,7 @@ export function AdminDashboard() {
                               <div className={`p-1 rounded-full ${round === 'easy' ? 'bg-green-100 dark:bg-green-900/20' : round === 'medium' ? 'bg-yellow-100 dark:bg-yellow-900/20' : 'bg-gray-100 dark:bg-gray-800'}`}>{roundIcons[round]}</div>
                               <span className="font-medium">{roundNames[round]}</span>
                             </div>
-                            <div className="flex items-center gap-2 w-56">
+                            <div className="flex items-center gap-2 w-56">  
                               <span className="text-sm text-muted-foreground min-w-[70px] text-right">{completed}/{total} Teams</span>
                               <div className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                                 <div className={`h-full ${roundColors[round]}`} style={{ width: `${percent}%` }}></div>

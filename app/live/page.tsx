@@ -75,12 +75,10 @@ export default function LiveContestPage() {
     }
   }, [])
 
-  // Use only the teams array built from participant_progress aggregation
-  // Build teams array from participantMap and teamMap
+  // Only count points for participant_progress with status 'correct'
   const participantMap: Record<string, any> = {};
-  progress.forEach(p => {
+  progress.filter(p => p.status === 'correct').forEach(p => {
     if (!participantMap[p.participantId]) {
-      console.log("participantMap entry", p);
       participantMap[p.participantId] = {
         participantId: p.participantId,
         name: p.participantName || p.name || p.participantId || "Unknown",
@@ -99,6 +97,7 @@ export default function LiveContestPage() {
         teamName: p.teamName,
         members: [],
         points: 0,
+        totalTime: 0,
       };
     }
     teamMap[p.teamName].members.push(p);
@@ -119,6 +118,14 @@ export default function LiveContestPage() {
     }
     if (p.status === "correct") {
       problemMap[p.questionId].status = "solved";
+      // Compute total time taken for this question using timer.remainingTime only
+      const team = teamMap[p.teamName];
+      if (team) {
+        const maxTime = p.round === "easy" ? 15 * 60 * 1000 : p.round === "medium" ? 20 * 60 * 1000 : 25 * 60 * 1000;
+        const remainingTime = p.timer?.remainingTime ? p.timer.remainingTime * 1000 : 0;
+        const timeTaken = maxTime - remainingTime;
+        team.totalTime += timeTaken;
+      }
     } else if (
       ["pending", "wrong", "in progress", "skipped"].includes(p.status) &&
       problemMap[p.questionId].status !== "solved"
@@ -228,29 +235,29 @@ export default function LiveContestPage() {
           <div className="flex-1">
             {/* 1. Live Leaderboard */}
             <Card className="bg-black/40 border-cyan-500/50 shadow-[0_0_15px_rgba(0,255,247,0.1)] mb-8">
-              <CardHeader>
+          <CardHeader>
                 <CardTitle className="text-4xl text-cyan-400 text-center text-shadow-cyber font-extrabold tracking-wide mb-4">
                   Live Leaderboard
-                </CardTitle>
+            </CardTitle>
                 {/* Problem Completion Statistics as text row */}
                 <div className="flex justify-center gap-8 mt-6 text-center">
                   <div>
                     <div className="text-2xl font-bold text-cyan-400">{stats.solved}</div>
-                    <div className="text-sm text-cyan-200">Solved</div>
-                  </div>
+                <div className="text-sm text-cyan-200">Solved</div>
+              </div>
                   <div>
                     <div className="text-2xl font-bold text-purple-400">{stats.attempted}</div>
-                    <div className="text-sm text-purple-200">Attempted</div>
-                  </div>
+                <div className="text-sm text-purple-200">Attempted</div>
+              </div>
                   <div>
                     <div className="text-2xl font-bold text-cyan-400">{stats.notStarted}</div>
-                    <div className="text-sm text-cyan-200">Not Started</div>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <AnimatePresence>
+                <div className="text-sm text-cyan-200">Not Started</div>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <AnimatePresence>
                     {teams.map((team, index) => {
                       // Badge color for top 3
                       const badgeColors = [
@@ -261,17 +268,17 @@ export default function LiveContestPage() {
                       const badgeClass = badgeColors[index] || "bg-cyan-800 text-cyan-100 border-cyan-400";
                       const isTop = index === 0;
                       return (
-                        <motion.div
+                  <motion.div
                           key={team.teamName}
-                          initial={{ opacity: 0, y: 20 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: -20 }}
-                          transition={{ duration: 0.3 }}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                    transition={{ duration: 0.3 }}
                           className={`flex items-center justify-between p-4 rounded-xl border shadow-lg transition-all
                             ${isTop ? "border-yellow-400 bg-gradient-to-r from-yellow-100/30 to-cyan-100/10 shadow-yellow-200/40" : "bg-black/30 border-cyan-500/30"}
                             hover:shadow-[0_0_15px_rgba(0,255,247,0.2)]`}
-                        >
-                          <div className="flex items-center gap-4">
+                  >
+                    <div className="flex items-center gap-4">
                             {/* Rank Badge */}
                             <div className={`w-10 h-10 flex items-center justify-center rounded-full border-2 font-bold text-lg shadow ${badgeClass}`}>
                               {index + 1}
@@ -279,11 +286,11 @@ export default function LiveContestPage() {
                             {/* Team Avatar/Initial */}
                             <div className="w-10 h-10 flex items-center justify-center rounded-full bg-cyan-700 text-cyan-100 font-bold text-xl shadow-inner mr-2">
                               {team.teamName?.[0]?.toUpperCase() || "?"}
-                            </div>
-                            <div>
+                      </div>
+                      <div>
                               <h3 className={`text-lg font-semibold text-shadow-cyber ${isTop ? "text-yellow-500" : "text-cyan-300"}`}>
                                 {team.teamName}
-                              </h3>
+                        </h3>
                               <div className="flex items-center gap-2 text-cyan-400 font-bold">
                                 <svg className="w-5 h-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2l2.39 4.84 5.34.78-3.87 3.77.91 5.32L10 13.77l-4.77 2.51.91-5.32-3.87-3.77 5.34-.78L10 2z"/></svg>
                                 <span className="text-green-400">{team.points}</span>
@@ -297,13 +304,16 @@ export default function LiveContestPage() {
                                   ))}
                                 </ul>
                               </div>
+                              <div className="text-xs text-cyan-200">
+                                {team.totalTime > 0 ? `${Math.floor(team.totalTime / 60000)}:${((team.totalTime % 60000) / 1000).toFixed(0).padStart(2, '0')}` : "Not completed"}
                             </div>
                           </div>
-                        </motion.div>
+                        </div>
+                      </motion.div>
                       );
                     })}
-                  </AnimatePresence>
-                </div>
+              </AnimatePresence>
+            </div>
                 {/* Problem Completion Statistics as text row */}
                 <div className="flex justify-center gap-8 mt-6 text-center">
                   <div>
@@ -313,14 +323,14 @@ export default function LiveContestPage() {
                   <div>
                     <div className="text-2xl font-bold text-purple-400">{stats.attempted}</div>
                     <div className="text-sm text-purple-200">Attempted</div>
-                  </div>
-                  <div>
+        </div>
+                      <div>
                     <div className="text-2xl font-bold text-cyan-400">{stats.notStarted}</div>
                     <div className="text-sm text-cyan-200">Not Started</div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                      </div>
+              </div>
+            </CardContent>
+          </Card>
           </div>
         </div>
       </div>
