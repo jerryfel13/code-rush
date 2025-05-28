@@ -8,7 +8,6 @@ import { Trophy, Users, Award, Clock, LogOut, User, BarChart, Settings, Play, Pa
 import { useRouter } from "next/navigation"
 import { AdminHeader } from "./admin-header"
 import { TeamsList } from "./teams-list"
-import { JudgesList } from "./judges-list"
 import { CompetitionControls } from "./competition-controls"
 import { ResultsTable } from "./results-table"
 import AdminQuestions from "../questions"
@@ -326,13 +325,6 @@ export function AdminDashboard() {
               <div className="space-y-6">
                 <h1 className="text-2xl font-bold">Teams Management</h1>
                 <TeamsList />
-              </div>
-            )}
-
-            {activeTab === "judges" && (
-              <div className="space-y-6">
-                <h1 className="text-2xl font-bold">Judges Management</h1>
-                <JudgesList />
               </div>
             )}
 

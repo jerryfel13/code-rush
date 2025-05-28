@@ -858,7 +858,7 @@ export function ParticipantInterface() {
                 <Card className="bg-[#181c24]/80 border border-cyan-700/40">
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2 text-cyan-300">
-                      Submit Your Answer
+                      {!started ? "Click start to proceed" : "Submit Your Answer"}
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
@@ -929,7 +929,7 @@ export function ParticipantInterface() {
                 <Card className="bg-[#181c24]/80 border border-cyan-700/40">
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2 text-cyan-300">
-                      Submit Your Answer
+                      {!started ? "Click start to proceed" : "Submit Your Answer"}
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
