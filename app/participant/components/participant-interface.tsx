@@ -197,21 +197,29 @@ export function ParticipantInterface() {
       hardDone = Object.keys(completedQuestions.hard).length;
     }
 
+    // Helper to find first incomplete question index in a round
+    const findFirstIncompleteIndex = (questionsArr, completedMap) => {
+      for (let i = 0; i < questionsArr.length; i++) {
+        if (!completedMap[i]) return i;
+      }
+      return 0;
+    };
+
     if (easyQuestions.length > 0 && easyDone === easyQuestions.length) {
       // All easy done, check medium
       if (mediumQuestions.length > 0 && mediumDone === mediumQuestions.length) {
         // All medium done, go to hard
         setActiveRound("hard");
-        setActiveQuestionIndex(0);
+        setActiveQuestionIndex(findFirstIncompleteIndex(hardQuestions, completedQuestions.hard));
       } else {
         // Go to medium
         setActiveRound("medium");
-        setActiveQuestionIndex(0);
+        setActiveQuestionIndex(findFirstIncompleteIndex(mediumQuestions, completedQuestions.medium));
       }
     } else {
       // Default to easy
       setActiveRound("easy");
-      setActiveQuestionIndex(0);
+      setActiveQuestionIndex(findFirstIncompleteIndex(easyQuestions, completedQuestions.easy));
     }
   }, [participant, questions, completedQuestions]);
 
