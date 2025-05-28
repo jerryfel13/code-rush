@@ -344,6 +344,7 @@ export function ParticipantInterface() {
       });
       setWaitingForJudge(true);
       if (activeRound === "easy") setIsTimerPaused(true); // Pause timer for easy round
+      if (activeRound === "medium" || activeRound === "hard") setIsTimerPaused(true); // Pause timer for medium and hard rounds
       toast({
         title: "Ready for Checking!",
         description: "The judge has been notified that you are ready for checking.",
@@ -839,110 +840,133 @@ export function ParticipantInterface() {
           </div>
           {currentQuestion ? (
             <div className="space-y-6">
-              <Card className="bg-[#181c24]/80 border border-cyan-700/40">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-cyan-300">
-                    {currentQuestion.title}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-cyan-100 mb-4">
-                    {currentQuestion.description}
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="bg-[#181c24]/80 border border-cyan-700/40">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-cyan-300">
-                    Submit Your Answer
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {progressMap[currentQuestion.id]?.status === "correct" ? (
-                      <p className="text-green-400">Question completed!</p>
-                    ) : progressMap[currentQuestion.id]?.status === "pending" ? (
-                      <Button disabled className="w-full bg-gradient-to-r from-cyan-500 via-blue-600 to-purple-600 text-white font-bold">
-                        Waiting for Judge...
-                      </Button>
-                    ) : !started ? (
-                      <Button
-                        onClick={async () => {
-                          // If the question was skipped, set status to 'in progress' but do not reset the timer
-                          if (progressMap[currentQuestion.id]?.status === "skipped") {
-                            if (participant && currentQuestion) {
-                              const progressRef = doc(
-                                collection(db, "participant_progress"),
-                                `${participant.id}_${currentQuestion.id}`
-                              );
-                              await setDoc(progressRef, {
-                                status: "in progress",
-                                timer: {
-                                  remainingTime: getCurrentTimeRemaining(),
-                                  isPaused: false,
-                                },
-                                started: true,
-                                updatedAt: new Date().toISOString(),
-                              }, { merge: true });
+              {started ? (
+                <Card className="bg-[#181c24]/80 border border-cyan-700/40">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-cyan-300">
+                      {currentQuestion.title}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-cyan-100 mb-4">
+                      {currentQuestion.description}
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : (
+                <Card className="bg-[#181c24]/80 border border-cyan-700/40">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-cyan-300">
+                      Submit Your Answer
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      {progressMap[currentQuestion.id]?.status === "correct" ? (
+                        <p className="text-green-400">Question completed!</p>
+                      ) : progressMap[currentQuestion.id]?.status === "pending" ? (
+                        <Button disabled className="w-full bg-gradient-to-r from-cyan-500 via-blue-600 to-purple-600 text-white font-bold">
+                          Waiting for Judge...
+                        </Button>
+                      ) : (
+                        <Button
+                          onClick={async () => {
+                            // If the question was skipped, set status to 'in progress' but do not reset the timer
+                            if (progressMap[currentQuestion.id]?.status === "skipped") {
+                              if (participant && currentQuestion) {
+                                const progressRef = doc(
+                                  collection(db, "participant_progress"),
+                                  `${participant.id}_${currentQuestion.id}`
+                                );
+                                await setDoc(progressRef, {
+                                  status: "in progress",
+                                  timer: {
+                                    remainingTime: getCurrentTimeRemaining(),
+                                    isPaused: false,
+                                  },
+                                  started: true,
+                                  updatedAt: new Date().toISOString(),
+                                }, { merge: true });
+                              }
+                            } else {
+                              // Mark as started in Firestore
+                              if (participant && currentQuestion) {
+                                const progressRef = doc(
+                                  collection(db, "participant_progress"),
+                                  `${participant.id}_${currentQuestion.id}`
+                                );
+                                await setDoc(progressRef, {
+                                  started: true,
+                                  participantId: participant.id,
+                                  teamName: participant.teamName,
+                                  questionId: currentQuestion.id,
+                                  answer: "", // No answer input
+                                  status: "skipped",
+                                  round: activeRound,
+                                  timer: {
+                                    remainingTime: getCurrentTimeRemaining(),
+                                    isPaused: false,
+                                  },
+                                  order: currentQuestion.order,
+                                  updatedAt: new Date().toISOString(),
+                                }, { merge: true });
+                              }
                             }
-                          } else {
-                            // Mark as started in Firestore
-                            if (participant && currentQuestion) {
-                              const progressRef = doc(
-                                collection(db, "participant_progress"),
-                                `${participant.id}_${currentQuestion.id}`
-                              );
-                              await setDoc(progressRef, {
-                                started: true,
-                                participantId: participant.id,
-                                teamName: participant.teamName,
-                                questionId: currentQuestion.id,
-                                answer: "", // No answer input
-                                status: "skipped",
-                                round: activeRound,
-                                timer: {
-                                  remainingTime: getCurrentTimeRemaining(),
-                                  isPaused: false,
-                                },
-                                order: currentQuestion.order,
-                                updatedAt: new Date().toISOString(),
-                              }, { merge: true });
-                            }
-                          }
-                          handleStart();
-                        }}
-                        className="w-full bg-gradient-to-r from-green-400 to-blue-500 text-white font-bold"
-                        disabled={getCurrentTimeRemaining() <= 0}
-                      >
-                        Start
-                      </Button>
-                    ) : getCurrentTimeRemaining() <= 0 ? (
-                      <div className="w-full text-center text-red-400 font-bold py-2">
-                        Time is up! You can no longer submit an answer for this question.
-                      </div>
-                    ) : (
-                      <div className="flex gap-2">
-                      <Button
-                        onClick={handleReadyForValidation}
-                          disabled={isSubmitting || waitingForJudge || getCurrentTimeRemaining() <= 0}
-                        className="w-full bg-gradient-to-r from-cyan-500 via-blue-600 to-purple-600 text-white font-bold"
-                      >
-                        {isSubmitting ? "Submitting..." : "Answer is Ready"}
-                    </Button>
-                        {activeQuestionIndex < roundQuestions.length - 1 && (
+                            handleStart();
+                          }}
+                          className="w-full bg-gradient-to-r from-green-400 to-blue-500 text-white font-bold"
+                          disabled={getCurrentTimeRemaining() <= 0}
+                        >
+                          Start
+                        </Button>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+              {started && (
+                <Card className="bg-[#181c24]/80 border border-cyan-700/40">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-cyan-300">
+                      Submit Your Answer
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      {progressMap[currentQuestion.id]?.status === "correct" ? (
+                        <p className="text-green-400">Question completed!</p>
+                      ) : progressMap[currentQuestion.id]?.status === "pending" ? (
+                        <Button disabled className="w-full bg-gradient-to-r from-cyan-500 via-blue-600 to-purple-600 text-white font-bold">
+                          Waiting for Judge...
+                        </Button>
+                      ) : getCurrentTimeRemaining() <= 0 ? (
+                        <div className="w-full text-center text-red-400 font-bold py-2">
+                          Time is up! You can no longer submit an answer for this question.
+                        </div>
+                      ) : (
+                        <div className="flex gap-2">
                           <Button
-                            onClick={handlePassSkip}
-                            disabled={waitingForJudge || getCurrentTimeRemaining() <= 0}
-                            className="w-full bg-gradient-to-r from-orange-400 to-yellow-500 text-white font-bold"
+                            onClick={handleReadyForValidation}
+                            disabled={isSubmitting || waitingForJudge || getCurrentTimeRemaining() <= 0}
+                            className="w-full bg-gradient-to-r from-cyan-500 via-blue-600 to-purple-600 text-white font-bold"
                           >
-                            Pass / Skip
+                            {isSubmitting ? "Submitting..." : "Answer is Ready"}
                           </Button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
+                          {activeQuestionIndex < roundQuestions.length - 1 && (
+                            <Button
+                              onClick={handlePassSkip}
+                              disabled={waitingForJudge || getCurrentTimeRemaining() <= 0}
+                              className="w-full bg-gradient-to-r from-orange-400 to-yellow-500 text-white font-bold"
+                            >
+                              Pass / Skip
+                            </Button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
             </div>
           ) : (
             <Card className="bg-[#181c24]/80 border border-cyan-700/40">
