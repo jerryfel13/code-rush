@@ -103,7 +103,8 @@ export function ParticipantInterface() {
     if (index < activeQuestionIndex) {
       const questionId = roundQuestions[index].id;
       const progress = progressMap[questionId];
-      return progress?.status === "correct" || progress?.status === "skipped" || (progress?.timer && progress.timer.remainingTime <= 0);
+      // Allow navigation to skipped questions
+      return progress?.status === "correct" || (progress?.timer && progress.timer.remainingTime <= 0);
     }
     // Unlock the next question if the previous is correct
     if (index === activeQuestionIndex + 1) {
@@ -689,36 +690,48 @@ export function ParticipantInterface() {
   // Add handler for pass/skip
   const handlePassSkip = async () => {
     if (!participant || !currentQuestion) return;
-    // Save timer state and mark as skipped
-    await saveTimerState(getCurrentTimeRemaining(), true);
+    
+    // Immediately update UI state
     setSkippedQuestions(prev => ({ ...prev, [currentQuestion.id]: true }));
-    // Save skipped status in progress
+    setIsTimerPaused(true);
+    
+    // Save timer state and mark as skipped
     const progressRef = doc(
       collection(db, "participant_progress"),
       `${participant.id}_${currentQuestion.id}`
     );
-    await setDoc(progressRef, {
-      participantId: participant.id,
-      teamName: participant.teamName,
-      questionId: currentQuestion.id,
-      status: "skipped",
-      round: activeRound,
-      timer: {
-        remainingTime: getCurrentTimeRemaining(),
-        isPaused: true,
-      },
-      order: currentQuestion.order,
-      updatedAt: new Date().toISOString(),
-    }, { merge: true });
-    // Move to next question if available
-    const nextIndex = activeQuestionIndex + 1;
-    if (nextIndex < roundQuestions.length) {
-      setActiveQuestionIndex(nextIndex);
-      setStarted(false);
-      setIsTimerPaused(true);
-    } else {
-      // If no more questions, stay on current
-      setIsTimerPaused(true);
+    
+    try {
+      await setDoc(progressRef, {
+        participantId: participant.id,
+        teamName: participant.teamName,
+        questionId: currentQuestion.id,
+        status: "skipped",
+        round: activeRound,
+        timer: {
+          remainingTime: getCurrentTimeRemaining(),
+          isPaused: true,
+        },
+        order: currentQuestion.order,
+        updatedAt: new Date().toISOString(),
+      }, { merge: true });
+
+      // Move to next question if available
+      const nextIndex = activeQuestionIndex + 1;
+      if (nextIndex < roundQuestions.length) {
+        setActiveQuestionIndex(nextIndex);
+        setStarted(false);
+        setIsTimerPaused(true);
+      } else {
+        setIsTimerPaused(true);
+      }
+    } catch (error) {
+      console.error("Error skipping question:", error);
+      toast({
+        title: "Error",
+        description: "Failed to skip question. Please try again.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -950,22 +963,23 @@ export function ParticipantInterface() {
                   size="sm"
                     onClick={() => {
                       const isCompleted = completedQuestions[activeRound]?.[index];
-                      // If the clicked question is not completed, allow navigation
-                      // if (!isCompleted) {
-                      //   if (index !== activeQuestionIndex) handleQuestionChange(index);
-                      //   return;
-                      // }
+                      const questionId = roundQuestions[index]?.id;
+                      const isSkipped = skippedQuestions[questionId];
+                      
+                      // Allow navigation to skipped questions
+                      if (isSkipped || !isCompleted) {
+                        if (index !== activeQuestionIndex) handleQuestionChange(index);
+                        return;
+                      }
+                      
                       // Only redirect to next round if this is the last question AND it's completed
-                      fetchProgress();
                       if (index === roundQuestions.length - 1 && isCompleted) {
-                        console.log("Redirecting to next round");
-                        // const { targetRound, targetIndex } = getFirstIncompleteRoundAndIndex(questions, completedQuestions);
-                        // setActiveRound(targetRound);
-                        // setActiveQuestionIndex(targetIndex);
+                        const { targetRound, targetIndex } = getFirstIncompleteRoundAndIndex(questions, completedQuestions);
+                        setActiveRound(targetRound);
+                        setActiveQuestionIndex(targetIndex);
                       } else if (index !== activeQuestionIndex) {
-                        console.log("Navigating to completed question", index);
                         // For other completed questions, just navigate to them
-                        // handleQuestionChange(index);
+                        handleQuestionChange(index);
                       }
                     }}
                     className={`${
