@@ -920,6 +920,22 @@ export function ParticipantInterface() {
     return { targetRound, targetIndex };
   }
 
+  // Add this function to check remaining questions
+  const getRemainingQuestionsCount = () => {
+    let count = 0;
+    for (let i = activeQuestionIndex + 1; i < roundQuestions.length; i++) {
+      const question = roundQuestions[i];
+      const progress = progressMap[question.id];
+      if (!progress || 
+          progress.status === "not started" || 
+          progress.status === "skipped" || 
+          progress.status === "in progress") {
+        count++;
+      }
+    }
+    return count;
+  };
+
   if (loadingQuestions) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -1090,73 +1106,31 @@ export function ParticipantInterface() {
                         <Button disabled className="w-full bg-gradient-to-r from-cyan-500 via-blue-600 to-purple-600 text-white font-bold">
                           Waiting for Judge...
                         </Button>
+                      ) : getCurrentTimeRemaining() <= 0 && 
+                         progressMap[currentQuestion.id]?.status !== "skipped" && 
+                         progressMap[currentQuestion.id]?.status !== "not started" ? (
+                        <div className="w-full text-center text-red-400 font-bold py-2">
+                          Time is up! You can no longer submit an answer for this question.
+                        </div>
                       ) : (
-                        <Button
-                          onClick={async () => {
-                            // If the question was skipped, restore the saved timer state
-                            if (progressMap[currentQuestion.id]?.status === "skipped") {
-                              if (participant && currentQuestion) {
-                                const progressRef = doc(
-                                  collection(db, "participant_progress"),
-                                  `${participant.id}_${currentQuestion.id}`
-                                );
-                                const progressSnap = await getDoc(progressRef);
-                                let savedTime = getCurrentTimeRemaining();
-                                
-                                if (progressSnap.exists()) {
-                                  const data = progressSnap.data();
-                                  if (data.timer && typeof data.timer.remainingTime === "number") {
-                                    savedTime = data.timer.remainingTime;
-                                  }
-                                }
-
-                                await setDoc(progressRef, {
-                                  status: "in progress",
-                                  timer: {
-                                    remainingTime: savedTime,
-                                    isPaused: false,
-                                  },
-                                  started: true,
-                                  updatedAt: new Date().toISOString(),
-                                }, { merge: true });
-
-                                // Set the timer state with the saved time
-                                setCurrentTimeRemaining(savedTime);
-                                setCurrentTimer(savedTime);
-                              }
-                            } else {
-                              // Mark as started in Firestore for new questions
-                              if (participant && currentQuestion) {
-                                const progressRef = doc(
-                                  collection(db, "participant_progress"),
-                                  `${participant.id}_${currentQuestion.id}`
-                                );
-                                await setDoc(progressRef, {
-                                  started: true,
-                                  participantId: participant.id,
-                                  teamName: participant.teamName,
-                                  questionId: currentQuestion.id,
-                                  answer: "", // No answer input
-                                  status: "in progress",
-                                  round: activeRound,
-                                  timer: {
-                                    remainingTime: getCurrentTimeRemaining(),
-                                    isPaused: false,
-                                  },
-                                  order: currentQuestion.order,
-                                  updatedAt: new Date().toISOString(),
-                                }, { merge: true });
-                              }
-                            }
-                            handleStart();
-                          }}
-                          className="w-full bg-gradient-to-r from-green-400 to-blue-500 text-white font-bold"
-                          disabled={getCurrentTimeRemaining() <= 0 && 
-                                  progressMap[currentQuestion.id]?.status !== "skipped" && 
-                                  progressMap[currentQuestion.id]?.status !== "not started"}
-                        >
-                          {progressMap[currentQuestion.id]?.status === "skipped" ? "Resume Question" : "Start"}
-                        </Button>
+                        <div className="flex gap-2">
+                          <Button
+                            onClick={handleReadyForValidation}
+                            disabled={isSubmitting || waitingForJudge}
+                            className="w-full bg-gradient-to-r from-cyan-500 via-blue-600 to-purple-600 text-white font-bold"
+                          >
+                            {isSubmitting ? "Submitting..." : "Answer is Ready"}
+                          </Button>
+                          {activeQuestionIndex < roundQuestions.length - 1 && getRemainingQuestionsCount() > 1 && (
+                            <Button
+                              onClick={handlePassSkip}
+                              disabled={waitingForJudge}
+                              className="w-full bg-gradient-to-r from-orange-400 to-yellow-500 text-white font-bold"
+                            >
+                              Pass / Skip
+                            </Button>
+                          )}
+                        </div>
                       )}
                     </div>
                   </CardContent>
@@ -1192,7 +1166,7 @@ export function ParticipantInterface() {
                           >
                             {isSubmitting ? "Submitting..." : "Answer is Ready"}
                           </Button>
-                          {activeQuestionIndex < roundQuestions.length - 1 && (
+                          {activeQuestionIndex < roundQuestions.length - 1 && getRemainingQuestionsCount() > 1 && (
                             <Button
                               onClick={handlePassSkip}
                               disabled={waitingForJudge}
