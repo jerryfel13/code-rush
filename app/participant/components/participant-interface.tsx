@@ -713,21 +713,43 @@ export function ParticipantInterface() {
         status: "skipped",
         round: activeRound,
         timer: {
-          remainingTime: currentRemainingTime, // Save the actual remaining time
+          remainingTime: currentRemainingTime,
           isPaused: true,
         },
         order: currentQuestion.order,
         updatedAt: new Date().toISOString(),
       }, { merge: true });
 
-      // Move to next question if available
-      const nextIndex = activeQuestionIndex + 1;
+      // Find the next available question
+      const findNextQuestion = () => {
+        // First, look for unskipped/not started questions
+        for (let i = activeQuestionIndex + 1; i < roundQuestions.length; i++) {
+          const question = roundQuestions[i];
+          const progress = progressMap[question.id];
+          if (!progress || progress.status === "not started") {
+            return i;
+          }
+        }
+        
+        // If no unskipped questions found, look for the next skipped question in order
+        for (let i = activeQuestionIndex + 1; i < roundQuestions.length; i++) {
+          const question = roundQuestions[i];
+          if (skippedQuestions[question.id]) {
+            return i;
+          }
+        }
+        
+        return activeQuestionIndex + 1; // Default to next question if nothing else found
+      };
+
+      const nextIndex = findNextQuestion();
+      
       if (nextIndex < roundQuestions.length) {
         setActiveQuestionIndex(nextIndex);
         setStarted(false);
         setIsTimerPaused(true);
         
-        // Get the next question's saved time or use default
+        // Get the next question's saved time or use current time
         const nextQuestion = roundQuestions[nextIndex];
         const nextProgressRef = doc(
           collection(db, "participant_progress"),
@@ -735,7 +757,7 @@ export function ParticipantInterface() {
         );
         const nextProgressSnap = await getDoc(nextProgressRef);
         
-        let nextTime = currentRemainingTime; // Use the same time as the skipped question
+        let nextTime = currentRemainingTime;
         if (nextProgressSnap.exists()) {
           const data = nextProgressSnap.data();
           if (data.timer && typeof data.timer.remainingTime === "number") {
