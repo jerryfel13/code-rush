@@ -239,7 +239,27 @@ export function ParticipantInterface() {
       setActiveQuestionIndex(targetIndex);
     }
   }, [participant, questions, completedQuestions, activeRound, activeQuestionIndex]);
-
+  const fetchProgress = async () => {
+    if (!participant) return;
+    const qProgress = query(
+      collection(db, "participant_progress"),
+      where("participantId", "==", participant.id)
+    );
+    const snapshot = await getDocs(qProgress);
+    const map: { [questionId: string]: any } = {};
+    const completed: { easy: any, medium: any, hard: any } = { easy: {}, medium: {}, hard: {} };
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      map[data.questionId] = data;
+      if (data.status === "correct") {
+        if (data.round === "easy") completed.easy[data.order - 1] = true;
+        if (data.round === "medium") completed.medium[data.order - 1] = true;
+        if (data.round === "hard") completed.hard[data.order - 1] = true;
+      }
+    });
+    setProgressMap(map);
+    setCompletedQuestions(completed);
+  };
   // Helper to get points for a question based on round
   const getPointsForCurrentQuestion = () => {
     if (activeRound === "easy") return 2;
@@ -329,6 +349,8 @@ export function ParticipantInterface() {
       await saveTimerState(getCurrentTimeRemaining(), true);
 
       // Switch to the new question
+      console.log("Switching to question", index);
+      
       setActiveQuestionIndex(index);
       setAnswer("");
 
@@ -929,14 +951,22 @@ export function ParticipantInterface() {
                     onClick={() => {
                       const isCompleted = completedQuestions[activeRound]?.[index];
                       // If the clicked question is not completed, allow navigation
-                      if (!isCompleted) {
-                        if (index !== activeQuestionIndex) handleQuestionChange(index);
-                        return;
+                      // if (!isCompleted) {
+                      //   if (index !== activeQuestionIndex) handleQuestionChange(index);
+                      //   return;
+                      // }
+                      // Only redirect to next round if this is the last question AND it's completed
+                      fetchProgress();
+                      if (index === roundQuestions.length - 1 && isCompleted) {
+                        console.log("Redirecting to next round");
+                        // const { targetRound, targetIndex } = getFirstIncompleteRoundAndIndex(questions, completedQuestions);
+                        // setActiveRound(targetRound);
+                        // setActiveQuestionIndex(targetIndex);
+                      } else if (index !== activeQuestionIndex) {
+                        console.log("Navigating to completed question", index);
+                        // For other completed questions, just navigate to them
+                        // handleQuestionChange(index);
                       }
-                      // If the clicked question is completed (true) or does not exist (undefined), redirect
-                      const { targetRound, targetIndex } = getFirstIncompleteRoundAndIndex(questions, completedQuestions);
-                      setActiveRound(targetRound);
-                      setActiveQuestionIndex(targetIndex);
                     }}
                     className={`${
                       index === activeQuestionIndex 
