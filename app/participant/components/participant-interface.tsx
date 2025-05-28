@@ -103,8 +103,9 @@ export function ParticipantInterface() {
     if (index < activeQuestionIndex) {
       const questionId = roundQuestions[index].id;
       const progress = progressMap[questionId];
-      // Allow navigation to skipped questions
-      return progress?.status === "correct" || (progress?.timer && progress.timer.remainingTime <= 0);
+      // Only lock if the question is correct or specifically timed out (not skipped)
+      return progress?.status === "correct" || 
+             (progress?.timer && progress.timer.remainingTime <= 0 && progress.status !== "skipped" && progress.status !== "not started");
     }
     // Unlock the next question if the previous is correct
     if (index === activeQuestionIndex + 1) {
@@ -691,6 +692,9 @@ export function ParticipantInterface() {
   const handlePassSkip = async () => {
     if (!participant || !currentQuestion) return;
     
+    // Get the current remaining time before skipping
+    const currentRemainingTime = getCurrentTimeRemaining();
+    
     // Immediately update UI state
     setSkippedQuestions(prev => ({ ...prev, [currentQuestion.id]: true }));
     setIsTimerPaused(true);
@@ -709,7 +713,7 @@ export function ParticipantInterface() {
         status: "skipped",
         round: activeRound,
         timer: {
-          remainingTime: getCurrentTimeRemaining(),
+          remainingTime: currentRemainingTime, // Save the actual remaining time
           isPaused: true,
         },
         order: currentQuestion.order,
@@ -722,6 +726,35 @@ export function ParticipantInterface() {
         setActiveQuestionIndex(nextIndex);
         setStarted(false);
         setIsTimerPaused(true);
+        
+        // Get the next question's saved time or use default
+        const nextQuestion = roundQuestions[nextIndex];
+        const nextProgressRef = doc(
+          collection(db, "participant_progress"),
+          `${participant.id}_${nextQuestion.id}`
+        );
+        const nextProgressSnap = await getDoc(nextProgressRef);
+        
+        let nextTime = currentRemainingTime; // Use the same time as the skipped question
+        if (nextProgressSnap.exists()) {
+          const data = nextProgressSnap.data();
+          if (data.timer && typeof data.timer.remainingTime === "number") {
+            nextTime = data.timer.remainingTime;
+          }
+        }
+        
+        setCurrentTimeRemaining(nextTime);
+        setCurrentTimer(nextTime);
+        
+        // Update Firestore with the new timer state
+        await setDoc(nextProgressRef, {
+          timer: {
+            remainingTime: nextTime,
+            isPaused: true,
+          },
+          started: false,
+          updatedAt: new Date().toISOString(),
+        }, { merge: true });
       } else {
         setIsTimerPaused(true);
       }
@@ -965,9 +998,12 @@ export function ParticipantInterface() {
                       const isCompleted = completedQuestions[activeRound]?.[index];
                       const questionId = roundQuestions[index]?.id;
                       const isSkipped = skippedQuestions[questionId];
+                      const progress = progressMap[questionId];
+                      const isTimeUp = progress?.timer?.remainingTime <= 0;
+                      const isNotStarted = progress?.status === "not started";
                       
-                      // Allow navigation to skipped questions
-                      if (isSkipped || !isCompleted) {
+                      // Allow navigation to skipped questions and not-started questions even if time is up
+                      if (isSkipped || isNotStarted || (!isCompleted && !isTimeUp)) {
                         if (index !== activeQuestionIndex) handleQuestionChange(index);
                         return;
                       }
@@ -1035,25 +1071,39 @@ export function ParticipantInterface() {
                       ) : (
                         <Button
                           onClick={async () => {
-                            // If the question was skipped, set status to 'in progress' but do not reset the timer
+                            // If the question was skipped, restore the saved timer state
                             if (progressMap[currentQuestion.id]?.status === "skipped") {
                               if (participant && currentQuestion) {
                                 const progressRef = doc(
                                   collection(db, "participant_progress"),
                                   `${participant.id}_${currentQuestion.id}`
                                 );
+                                const progressSnap = await getDoc(progressRef);
+                                let savedTime = getCurrentTimeRemaining();
+                                
+                                if (progressSnap.exists()) {
+                                  const data = progressSnap.data();
+                                  if (data.timer && typeof data.timer.remainingTime === "number") {
+                                    savedTime = data.timer.remainingTime;
+                                  }
+                                }
+
                                 await setDoc(progressRef, {
                                   status: "in progress",
                                   timer: {
-                                    remainingTime: getCurrentTimeRemaining(),
+                                    remainingTime: savedTime,
                                     isPaused: false,
                                   },
                                   started: true,
                                   updatedAt: new Date().toISOString(),
                                 }, { merge: true });
+
+                                // Set the timer state with the saved time
+                                setCurrentTimeRemaining(savedTime);
+                                setCurrentTimer(savedTime);
                               }
                             } else {
-                              // Mark as started in Firestore
+                              // Mark as started in Firestore for new questions
                               if (participant && currentQuestion) {
                                 const progressRef = doc(
                                   collection(db, "participant_progress"),
@@ -1065,7 +1115,7 @@ export function ParticipantInterface() {
                                   teamName: participant.teamName,
                                   questionId: currentQuestion.id,
                                   answer: "", // No answer input
-                                  status: "skipped",
+                                  status: "in progress",
                                   round: activeRound,
                                   timer: {
                                     remainingTime: getCurrentTimeRemaining(),
@@ -1079,9 +1129,11 @@ export function ParticipantInterface() {
                             handleStart();
                           }}
                           className="w-full bg-gradient-to-r from-green-400 to-blue-500 text-white font-bold"
-                          disabled={getCurrentTimeRemaining() <= 0}
+                          disabled={getCurrentTimeRemaining() <= 0 && 
+                                  progressMap[currentQuestion.id]?.status !== "skipped" && 
+                                  progressMap[currentQuestion.id]?.status !== "not started"}
                         >
-                          Start
+                          {progressMap[currentQuestion.id]?.status === "skipped" ? "Resume Question" : "Start"}
                         </Button>
                       )}
                     </div>
@@ -1092,7 +1144,7 @@ export function ParticipantInterface() {
                 <Card className="bg-[#181c24]/80 border border-cyan-700/40">
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2 text-cyan-300">
-                      {!started ? "Click start to proceed" : "Submit Your Answer"}
+                      Submit Your Answer
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
@@ -1103,7 +1155,9 @@ export function ParticipantInterface() {
                         <Button disabled className="w-full bg-gradient-to-r from-cyan-500 via-blue-600 to-purple-600 text-white font-bold">
                           Waiting for Judge...
                         </Button>
-                      ) : getCurrentTimeRemaining() <= 0 ? (
+                      ) : getCurrentTimeRemaining() <= 0 && 
+                         progressMap[currentQuestion.id]?.status !== "skipped" && 
+                         progressMap[currentQuestion.id]?.status !== "not started" ? (
                         <div className="w-full text-center text-red-400 font-bold py-2">
                           Time is up! You can no longer submit an answer for this question.
                         </div>
@@ -1111,7 +1165,7 @@ export function ParticipantInterface() {
                         <div className="flex gap-2">
                           <Button
                             onClick={handleReadyForValidation}
-                            disabled={isSubmitting || waitingForJudge || getCurrentTimeRemaining() <= 0}
+                            disabled={isSubmitting || waitingForJudge}
                             className="w-full bg-gradient-to-r from-cyan-500 via-blue-600 to-purple-600 text-white font-bold"
                           >
                             {isSubmitting ? "Submitting..." : "Answer is Ready"}
@@ -1119,7 +1173,7 @@ export function ParticipantInterface() {
                           {activeQuestionIndex < roundQuestions.length - 1 && (
                             <Button
                               onClick={handlePassSkip}
-                              disabled={waitingForJudge || getCurrentTimeRemaining() <= 0}
+                              disabled={waitingForJudge}
                               className="w-full bg-gradient-to-r from-orange-400 to-yellow-500 text-white font-bold"
                             >
                               Pass / Skip
