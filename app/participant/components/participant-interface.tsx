@@ -99,9 +99,11 @@ export function ParticipantInterface() {
 
   // Check if a question is locked
   const isQuestionLocked = (round: string, index: number) => {
+    const questionId = roundQuestions[index].id;
+    // If no progress, always unlocked
+    if (!progressMap[questionId]) return false;
     if (index === activeQuestionIndex) return false;
     if (index < activeQuestionIndex) {
-      const questionId = roundQuestions[index].id;
       const progress = progressMap[questionId];
       // Only lock if the question is correct or specifically timed out (not skipped)
       return progress?.status === "correct" || 
@@ -691,20 +693,26 @@ export function ParticipantInterface() {
   // Add handler for pass/skip
   const handlePassSkip = async () => {
     if (!participant || !currentQuestion) return;
-    
-    // Get the current remaining time before skipping
+
     const currentRemainingTime = getCurrentTimeRemaining();
-    
-    // Immediately update UI state
+
+    // Optimistically update UI state
     setSkippedQuestions(prev => ({ ...prev, [currentQuestion.id]: true }));
     setIsTimerPaused(true);
-    
-    // Save timer state and mark as skipped
+    setProgressMap(prev => ({
+      ...prev,
+      [currentQuestion.id]: {
+        ...(prev[currentQuestion.id] || {}),
+        status: "skipped",
+      },
+    }));
+
+    // Save timer state and mark as skipped in Firestore
     const progressRef = doc(
       collection(db, "participant_progress"),
       `${participant.id}_${currentQuestion.id}`
     );
-    
+
     try {
       await setDoc(progressRef, {
         participantId: participant.id,
@@ -720,86 +728,70 @@ export function ParticipantInterface() {
         updatedAt: new Date().toISOString(),
       }, { merge: true });
 
-      // Find the next available question in the current round, prioritizing: no progress, in progress, skipped
-      const sortedQs = [...roundQuestions].sort((a, b) => Number(a.order) - Number(b.order));
-      let found = false;
-      // 1. No progress
-      for (let i = 0; i < sortedQs.length; i++) {
-        const q = sortedQs[i];
-        if (!progressMap[q.id]) {
-          setActiveQuestionIndex(roundQuestions.findIndex(qq => qq.id === q.id));
-          found = true;
+      // First try to find a question with no progress in the current round
+      const currentRoundQuestions = questions.filter(q => q.difficulty === activeRound);
+      let nextQuestionFound = false;
+
+      // Sort questions by order
+      const sortedQuestions = [...currentRoundQuestions].sort((a, b) => Number(a.order) - Number(b.order));
+      
+      // Look for questions with no progress
+      for (const question of sortedQuestions) {
+        if (!progressMap[question.id] || progressMap[question.id]?.status === "not started") {
+          const questionIndex = currentRoundQuestions.findIndex(q => q.id === question.id);
+          setActiveQuestionIndex(questionIndex);
+          nextQuestionFound = true;
           break;
         }
       }
-      if (!found) {
-        // 2. In progress
-        for (let i = 0; i < sortedQs.length; i++) {
-          const q = sortedQs[i];
-          if (progressMap[q.id]?.status === "in progress") {
-            setActiveQuestionIndex(roundQuestions.findIndex(qq => qq.id === q.id));
-            found = true;
+
+      // If no question found in current round, look in other rounds
+      if (!nextQuestionFound) {
+        const rounds = ["easy", "medium", "hard"];
+        const currentRoundIndex = rounds.indexOf(activeRound);
+        
+        // Check subsequent rounds
+        for (let i = currentRoundIndex + 1; i < rounds.length; i++) {
+          const nextRound = rounds[i];
+          const nextRoundQuestions = questions.filter(q => q.difficulty === nextRound);
+          
+          // Skip if round is locked
+          if (isRoundLocked(nextRound)) continue;
+          
+          // Sort questions by order
+          const sortedNextRoundQuestions = [...nextRoundQuestions].sort((a, b) => Number(a.order) - Number(b.order));
+          
+          // Look for questions with no progress
+          for (const question of sortedNextRoundQuestions) {
+            if (!progressMap[question.id] || progressMap[question.id]?.status === "not started") {
+              setActiveRound(nextRound);
+              const questionIndex = nextRoundQuestions.findIndex(q => q.id === question.id);
+              setActiveQuestionIndex(questionIndex);
+              nextQuestionFound = true;
+              break;
+            }
+          }
+          
+          if (nextQuestionFound) break;
+        }
+      }
+
+      // If still no question found, go back to first round and look for any question
+      if (!nextQuestionFound) {
+        const firstRoundQuestions = questions.filter(q => q.difficulty === "easy");
+        const sortedFirstRoundQuestions = [...firstRoundQuestions].sort((a, b) => Number(a.order) - Number(b.order));
+        
+        for (const question of sortedFirstRoundQuestions) {
+          if (!progressMap[question.id] || progressMap[question.id]?.status === "not started") {
+            setActiveRound("easy");
+            const questionIndex = firstRoundQuestions.findIndex(q => q.id === question.id);
+            setActiveQuestionIndex(questionIndex);
+            nextQuestionFound = true;
             break;
           }
         }
       }
-      if (!found) {
-        // 3. Skipped
-        for (let i = 0; i < sortedQs.length; i++) {
-          const q = sortedQs[i];
-          if (skippedQuestions[q.id]) {
-            setActiveQuestionIndex(roundQuestions.findIndex(qq => qq.id === q.id));
-            found = true;
-            break;
-          }
-        }
-      }
-      if (!found) {
-        // Only if all are done, then proceed to the next round's first available question
-        const allRounds = [
-          { round: "easy", questions: questions.filter(q => q.difficulty === "easy") },
-          { round: "medium", questions: questions.filter(q => q.difficulty === "medium") },
-          { round: "hard", questions: questions.filter(q => q.difficulty === "hard") },
-        ];
-        let nextFound = false;
-        for (const { round, questions: roundQs } of allRounds) {
-          if (round === activeRound) continue; // skip current round
-          const sortedNextQs = [...roundQs].sort((a, b) => Number(a.order) - Number(b.order));
-          // 1. No progress
-          for (let i = 0; i < sortedNextQs.length; i++) {
-            const q = sortedNextQs[i];
-            if (!progressMap[q.id]) {
-              setActiveRound(round);
-              setActiveQuestionIndex(roundQs.findIndex(qq => qq.id === q.id));
-              nextFound = true;
-              break;
-            }
-          }
-          if (nextFound) break;
-          // 2. In progress
-          for (let i = 0; i < sortedNextQs.length; i++) {
-            const q = sortedNextQs[i];
-            if (progressMap[q.id]?.status === "in progress") {
-              setActiveRound(round);
-              setActiveQuestionIndex(roundQs.findIndex(qq => qq.id === q.id));
-              nextFound = true;
-              break;
-            }
-          }
-          if (nextFound) break;
-          // 3. Skipped
-          for (let i = 0; i < sortedNextQs.length; i++) {
-            const q = sortedNextQs[i];
-            if (skippedQuestions[q.id]) {
-              setActiveRound(round);
-              setActiveQuestionIndex(roundQs.findIndex(qq => qq.id === q.id));
-              nextFound = true;
-              break;
-            }
-          }
-          if (nextFound) break;
-        }
-      }
+
       setIsTimerPaused(true);
     } catch (error) {
       console.error("Error skipping question:", error);
@@ -1232,15 +1224,6 @@ export function ParticipantInterface() {
                           >
                             {isSubmitting ? "Submitting..." : "Answer is Ready"}
                           </Button>
-                          {getRemainingQuestionsCount() > 1 && (
-                            <Button
-                              onClick={handlePassSkip}
-                              disabled={waitingForJudge}
-                              className="w-full bg-gradient-to-r from-orange-400 to-yellow-500 text-white font-bold"
-                            >
-                              Pass / Skip
-                            </Button>
-                          )}
                         </div>
                       )}
                     </div>
